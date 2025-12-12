@@ -1,0 +1,34 @@
+# rollback-pipeline.yml
+steps:
+  # --- 1. GET ROLLBACK DETAILS (Input Step) ---
+  - label: "⚙️ Initiate Service Rollback"
+    key: "get_rollback_info"
+    prompt: "Please specify the service and the image tag (version) for rollback."
+    type: input
+    fields:
+      - text: "SERVICE_NAME_RB" # Using a unique key for clarity
+        hint: "Service name (e.g., 'frontend')"
+        required: true
+      - text: "PREVIOUS_TAG_RB"
+        hint: "The known good BUILD_TAG (Commit Hash/Version) to revert to."
+        required: true
+
+  # --- 2. EXECUTE ROLLBACK (Command Step) ---
+  - label: "⏪ Execute Rollback for $$SERVICE_NAME_RB"
+    key: "execute_rollback"
+    depends_on: "get_rollback_info"
+    commands:
+      - |
+        SERVICE_NAME="$$(buildkite-agent meta-data get SERVICE_NAME_RB)"
+        PREVIOUS_TAG="$$(buildkite-agent meta-data get PREVIOUS_TAG_RB)"
+        
+        echo "Initiating rollback for ${SERVICE_NAME} to tag: ${PREVIOUS_TAG}"
+        
+        ECR_REGISTRY_URI="<YOUR_ACCOUNT_ID>.dkr.ecr.<YOUR_REGION>.amazonaws.com"
+        ROLLBACK_IMAGE_URI="${ECR_REGISTRY_URI}/${SERVICE_NAME}:${PREVIOUS_TAG}"
+        
+        # Your service-specific deployment/rollback logic goes here.
+        # This will vary based on ECS, EKS, etc.
+        # Example: Update the task definition/deployment to use $ROLLBACK_IMAGE_URI
+        
+        echo "Rollback sequence complete."
