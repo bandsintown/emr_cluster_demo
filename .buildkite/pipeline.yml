@@ -28,7 +28,7 @@ steps:
         BUILD_TAG="${BUILDKITE_COMMIT}"
         ECR_REGISTRY_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         REPOSITORY_NAME="emr_cluster_$${SERVICE_NAME}"
-        IMAGE_URI="${ECR_REGISTRY_URI}/$${REPOSITORY_NAME}"
+        IMAGE_URI="$${ECR_REGISTRY_URI}/$${REPOSITORY_NAME}"
         DOCKERFILE_PATH="."
         BASE_DIR="."
         
