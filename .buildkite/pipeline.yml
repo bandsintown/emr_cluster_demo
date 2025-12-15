@@ -15,31 +15,59 @@ steps:
     key: "build_and_push"
     depends_on: "get_service_name"
     commands:
-      # --- LOAD ENVIRONMENT VARIABLES FROM FILE ---
-      # This command loads the variables from build.env into the shell environment
+      # --- 1. CONSOLIDATED VARIABLE DEFINITION AND IMAGE CALCULATION ---
+      # All variables that rely on each other MUST be in one shell block.
       - |
-        if [ -f build.env ]; then
-          echo "Loading environment variables from build.env..."
-          export $(grep -v '^#' build.env | xargs)
-        else
-          echo "Error: build.env file not found. Pipeline cannot continue."
-          exit 1
-        fi
+        # 1. Retrieve required variables from Meta-data
+        SERVICE_NAME="$(buildkite-agent meta-data get SERVICE_NAME)"
+        AWS_ACCOUNT_ID="$(buildkite-agent meta-data get AWS_ACCOUNT_ID)"
+        AWS_REGION="$(buildkite-agent meta-data get AWS_REGION)"
+        
+        # 2. Define/Calculate dependent variables
+        BUILD_TAG="${BUILDKITE_COMMIT}"
+        ECR_REGISTRY_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        REPOSITORY_NAME="emr_cluster_${SERVICE_NAME}" # Uses SERVICE_NAME
+        IMAGE_URI="${ECR_REGISTRY_URI}/${REPOSITORY_NAME}" # Uses ECR_REGISTRY_URI
+        DOCKERFILE_PATH="."
+        
+        echo "Calculated Image URI: ${IMAGE_URI}:${BUILD_TAG}"
+        
+        # 3. Persist ALL calculated variables to meta-data for subsequent commands
+        buildkite-agent meta-data set "IMAGE_URI" "${IMAGE_URI}"
+        buildkite-agent meta-data set "BUILD_TAG" "${BUILD_TAG}"
+        buildkite-agent meta-data set "DOCKERFILE_PATH" "${DOCKERFILE_PATH}"
+        buildkite-agent meta-data set "SERVICE_NAME" "${SERVICE_NAME}" # Re-save for consistency
 
-      - SERVICE_NAME="emr_cluster_demo"
+      # --- 2. BUILD ACTION (Separate Command) ---
+      # This command retrieves necessary variables from meta-data
+      - |
+        IMAGE_URI="$(buildkite-agent meta-data get IMAGE_URI)"
+        DOCKERFILE_PATH="$(buildkite-agent meta-data get DOCKERFILE_PATH)"
+        SERVICE_NAME="$(buildkite-agent meta-data get SERVICE_NAME)"
+        BUILD_TAG="$(buildkite-agent meta-data get BUILD_TAG)"
+        
+        echo "--- Building Image ---"
+        docker build \
+          --file "${DOCKERFILE_PATH}" \
+          --tag "${IMAGE_URI}:${BUILD_TAG}" \
+          "${BASE_DIR}/${SERVICE_NAME}"
 
-      # Define your ECR variables using the now-loaded shell variables
-      # Note: We now use $AWS_ACCOUNT_ID and $AWS_REGION from build.env
-      - ECR_REGISTRY_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-      - REPOSITORY_NAME="${SERVICE_NAME}"
-      - BUILD_TAG="${BUILDKITE_COMMIT}"
-      - IMAGE_URI="${ECR_REGISTRY_URI}/${REPOSITORY_NAME}"
+      # --- 3. PUSH ACTION (Separate Command) ---
+      # This command retrieves necessary variables from meta-data
+      - |
+        IMAGE_URI="$(buildkite-agent meta-data get IMAGE_URI)"
+        BUILD_TAG="$(buildkite-agent meta-data get BUILD_TAG)"
+        
+        echo "--- Pushing Image to ECR ---"
+        docker push "${IMAGE_URI}:${BUILD_TAG}"
 
-      # Login, Build, and Push
-      # Note: We use the shell variable $AWS_REGION here
-      - aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY_URI}
-      - docker build -t ${IMAGE_URI}:${BUILD_TAG} .
-      - docker push ${IMAGE_URI}:${BUILD_TAG}
+      # --- 4. FINAL META-DATA SET (Separate Command) ---
+      - |
+        IMAGE_URI="$(buildkite-agent meta-data get IMAGE_URI)"
+        BUILD_TAG="$(buildkite-agent meta-data get BUILD_TAG)"
+        
+        buildkite-agent meta-data set "FINAL_IMAGE_URI" "${IMAGE_URI}:${BUILD_TAG}"
+
 
     # Store key variables as metadata for downstream pipelines
     env:
@@ -49,32 +77,32 @@ steps:
       AWS_REGION: "$$(buildkite-agent meta-data get AWS_REGION)"
       AWS_ACCOUNT_ID: "$$(buildkite-agent meta-data get AWS_ACCOUNT_ID)"
 
-  # --- 3. TRIGGER S3 PUSH PIPELINE (Optional Input + Trigger) ---
-  - label: "❓ Trigger S3 Asset Push?"
-    key: "ask_s3_push"
-    prompt: "Do you want to extract and push the static assets to S3?"
-    type: input
-    depends_on: "build_and_push"
-    fields:
-      - text: "S3_CHOICE"
-        default: "yes"
-        options:
-          - label: "Yes, push to S3"
-            value: "yes"
-          - label: "No, skip S3 push"
-            value: "no"
-
-  - label: "⬆️ Trigger S3 Push Pipeline"
-    key: "trigger_s3"
-    trigger: "my-s3-pipeline"
-    build:
-      # Pass required information to the triggered pipeline
-      env:
-        SERVICE_NAME: "$$(buildkite-agent meta-data get SERVICE_NAME)"
-        IMAGE_URI: "$$(buildkite-agent meta-data get IMAGE_URI)"
-        BUILD_TAG: "$$(buildkite-agent meta-data get BUILD_TAG)"
-        # Pass the region so the S3 script can use it
-        AWS_REGION: "$$(buildkite-agent meta-data get AWS_REGION)"
-    if: "$$(buildkite-agent meta-data get S3_CHOICE) == 'yes'"
+#  # --- 3. TRIGGER S3 PUSH PIPELINE (Optional Input + Trigger) ---
+#  - label: "❓ Trigger S3 Asset Push?"
+#    key: "ask_s3_push"
+#    prompt: "Do you want to extract and push the static assets to S3?"
+#    type: input
+#    depends_on: "build_and_push"
+#    fields:
+#      - text: "S3_CHOICE"
+#        default: "yes"
+#        options:
+#          - label: "Yes, push to S3"
+#            value: "yes"
+#          - label: "No, skip S3 push"
+#            value: "no"
+#
+#  - label: "⬆️ Trigger S3 Push Pipeline"
+#    key: "trigger_s3"
+#    trigger: "my-s3-pipeline"
+#    build:
+#      # Pass required information to the triggered pipeline
+#      env:
+#        SERVICE_NAME: "$$(buildkite-agent meta-data get SERVICE_NAME)"
+#        IMAGE_URI: "$$(buildkite-agent meta-data get IMAGE_URI)"
+#        BUILD_TAG: "$$(buildkite-agent meta-data get BUILD_TAG)"
+#        # Pass the region so the S3 script can use it
+#        AWS_REGION: "$$(buildkite-agent meta-data get AWS_REGION)"
+#    if: "$$(buildkite-agent meta-data get S3_CHOICE) == 'yes'"
 
 # ... (The rest of the triggers remain the same)
