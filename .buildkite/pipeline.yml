@@ -32,42 +32,13 @@ steps:
         DOCKERFILE_PATH="."
         
         echo "Calculated Image URI: ${IMAGE_URI}:${BUILD_TAG}"
-        
-        # 3. Persist ALL calculated variables to meta-data for subsequent commands
-        buildkite-agent meta-data set "IMAGE_URI" "${IMAGE_URI}"
-        buildkite-agent meta-data set "BUILD_TAG" "${BUILD_TAG}"
-        buildkite-agent meta-data set "DOCKERFILE_PATH" "${DOCKERFILE_PATH}"
-        buildkite-agent meta-data set "SERVICE_NAME" "${SERVICE_NAME}" # Re-save for consistency
-
-      # --- 2. BUILD ACTION (Separate Command) ---
-      # This command retrieves necessary variables from meta-data
-      - |
-        IMAGE_URI="$(buildkite-agent meta-data get IMAGE_URI)"
-        DOCKERFILE_PATH="$(buildkite-agent meta-data get DOCKERFILE_PATH)"
-        SERVICE_NAME="$(buildkite-agent meta-data get SERVICE_NAME)"
-        BUILD_TAG="$(buildkite-agent meta-data get BUILD_TAG)"
-        
         echo "--- Building Image ---"
         docker build \
           --file "${DOCKERFILE_PATH}" \
           --tag "${IMAGE_URI}:${BUILD_TAG}" \
           "${BASE_DIR}/${SERVICE_NAME}"
-
-      # --- 3. PUSH ACTION (Separate Command) ---
-      # This command retrieves necessary variables from meta-data
-      - |
-        IMAGE_URI="$(buildkite-agent meta-data get IMAGE_URI)"
-        BUILD_TAG="$(buildkite-agent meta-data get BUILD_TAG)"
-        
         echo "--- Pushing Image to ECR ---"
         docker push "${IMAGE_URI}:${BUILD_TAG}"
-
-      # --- 4. FINAL META-DATA SET (Separate Command) ---
-      - |
-        IMAGE_URI="$(buildkite-agent meta-data get IMAGE_URI)"
-        BUILD_TAG="$(buildkite-agent meta-data get BUILD_TAG)"
-        
-        buildkite-agent meta-data set "FINAL_IMAGE_URI" "${IMAGE_URI}:${BUILD_TAG}"
 
 
     # Store key variables as metadata for downstream pipelines
