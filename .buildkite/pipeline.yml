@@ -8,6 +8,7 @@ steps:
     type: input
     fields:
       - text: "SERVICE_NAME"
+        key: "SERVICE_NAME"
         required: true
 
   # --- 2. BUILD AND PUSH TO ECR (Command Step) ---
