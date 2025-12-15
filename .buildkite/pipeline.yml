@@ -21,8 +21,8 @@ steps:
       - |
         # 1. Retrieve required variables from Meta-data
         SERVICE_NAME=$$(buildkite-agent meta-data get "SERVICE_NAME")
-        AWS_ACCOUNT_ID="us-east-1"
-        AWS_REGION="052510803641"
+        AWS_ACCOUNT_ID="052510803641"
+        AWS_REGION="us-east-1"
         
         # 2. Define/Calculate dependent variables
         BUILD_TAG="${BUILDKITE_COMMIT}"
@@ -30,6 +30,7 @@ steps:
         REPOSITORY_NAME="emr_cluster_${SERVICE_NAME}" # Uses SERVICE_NAME
         IMAGE_URI="${ECR_REGISTRY_URI}/${REPOSITORY_NAME}" # Uses ECR_REGISTRY_URI
         DOCKERFILE_PATH="."
+        BASE_DIR="."
         
         echo "Calculated Image URI: ${IMAGE_URI}:${BUILD_TAG}"
         echo "--- Building Image ---"
@@ -39,15 +40,12 @@ steps:
           "${BASE_DIR}/${SERVICE_NAME}"
         echo "--- Pushing Image to ECR ---"
         docker push "${IMAGE_URI}:${BUILD_TAG}"
-
-
-    # Store key variables as metadata for downstream pipelines
-    env:
-      IMAGE_URI: "${IMAGE_URI}"
-      BUILD_TAG: "${BUILD_TAG}"
-      # Also store the dynamic AWS variables if the next pipelines need them
-      AWS_REGION: "$$(buildkite-agent meta-data get AWS_REGION)"
-      AWS_ACCOUNT_ID: "$$(buildkite-agent meta-data get AWS_ACCOUNT_ID)"
+        
+        # STORE FOR DOWNSTREAM STEPS
+        buildkite-agent meta-data set "IMAGE_URI" "${IMAGE_URI}"
+        buildkite-agent meta-data set "BUILD_TAG" "${BUILD_TAG}"
+        buildkite-agent meta-data set "AWS_REGION" "${AWS_REGION}"
+        buildkite-agent meta-data set "AWS_ACCOUNT_ID" "${AWS_ACCOUNT_ID}"
 
 #  # --- 3. TRIGGER S3 PUSH PIPELINE (Optional Input + Trigger) ---
 #  - label: "❓ Trigger S3 Asset Push?"
