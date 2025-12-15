@@ -26,8 +26,7 @@ steps:
           exit 1
         fi
 
-      # Retrieve the user input and set it as a variable for the step
-      - SERVICE_NAME="$$(buildkite-agent meta-data get SERVICE_NAME)"
+      - SERVICE_NAME="emr_cluster_demo"
 
       # Define your ECR variables using the now-loaded shell variables
       # Note: We now use $AWS_ACCOUNT_ID and $AWS_REGION from build.env
