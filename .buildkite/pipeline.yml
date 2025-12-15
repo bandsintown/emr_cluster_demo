@@ -19,6 +19,24 @@ steps:
       # --- 1. CONSOLIDATED VARIABLE DEFINITION AND IMAGE CALCULATION ---
       # All variables that rely on each other MUST be in one shell block.
       - |
+        ENV_FILE="build.env"
+
+        if [ ! -f "$ENV_FILE" ]; then
+          echo "Error: $ENV_FILE file not found. Pipeline cannot continue."
+          exit 1
+        fi
+
+        # 1. Source the file to load variables into the current shell session
+        echo "Sourcing environment variables from $ENV_FILE..."
+        # Using '.' is standard for sourcing files
+        . "$ENV_FILE" 
+
+        # 2. Persist the variables by setting Build Meta-data
+        echo "Persisting key variables to Buildkite Meta-data..."
+        buildkite-agent meta-data set "AWS_ACCOUNT_ID" "${AWS_ACCOUNT_ID}"
+        buildkite-agent meta-data set "AWS_REGION" "${AWS_REGION}"
+
+      - |
         # 1. Retrieve required variables from Meta-data
         SERVICE_NAME="$(buildkite-agent meta-data get SERVICE_NAME)"
         AWS_ACCOUNT_ID="$(buildkite-agent meta-data get AWS_ACCOUNT_ID)"
