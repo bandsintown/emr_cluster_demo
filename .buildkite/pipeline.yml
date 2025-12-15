@@ -20,7 +20,7 @@ steps:
       # All variables that rely on each other MUST be in one shell block.
       - |
         # 1. Retrieve required variables from Meta-data
-        SERVICE_NAME="$(buildkite-agent meta-data get SERVICE_NAME)"
+        SERVICE_NAME=$$(buildkite-agent meta-data get "SERVICE_NAME")
         AWS_ACCOUNT_ID="us-east-1"
         AWS_REGION="052510803641"
         
