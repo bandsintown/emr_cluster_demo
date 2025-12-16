@@ -29,7 +29,7 @@ steps:
         ECR_REGISTRY_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         REPOSITORY_NAME="emr_cluster_$${SERVICE_NAME}"
         IMAGE_URI="$${ECR_REGISTRY_URI}/$${REPOSITORY_NAME}"
-        DOCKERFILE_PATH="."
+        DOCKERFILE_PATH="Dockerfile"
         BASE_DIR="."
         
         echo "Calculated Image URI: $${IMAGE_URI}:$${BUILD_TAG}"
