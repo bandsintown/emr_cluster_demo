@@ -21,13 +21,13 @@ steps:
       - |
         # 1. Retrieve required variables from Meta-data
         SERVICE_NAME="test_dir"
-        AWS_ACCOUNT_ID="052510803641"
+        AWS_ACCOUNT_ID="004095192903"
         AWS_REGION="us-east-1"
         
         # 2. Define/Calculate dependent variables
-        BUILD_TAG="${BUILDKITE_COMMIT}"
+        BUILD_TAG="${BUILDKITE_COMMIT}_$${SERVICE_NAME}"
         ECR_REGISTRY_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-        REPOSITORY_NAME="emr_cluster_$${SERVICE_NAME}"
+        REPOSITORY_NAME="emr_cluster"
         IMAGE_URI="$${ECR_REGISTRY_URI}/$${REPOSITORY_NAME}"
         DOCKERFILE_PATH="Dockerfile"
         BASE_DIR="."
