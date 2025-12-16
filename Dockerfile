@@ -12,7 +12,7 @@ ARG SERVICE_NAME
 WORKDIR /app
 
 # Copy the folder specified by SERVICE_NAME into the image
-COPY $${SERVICE_NAME}/ ./
+COPY ${SERVICE_NAME}/ ./
 
 # Optional: keep container alive
 CMD ["sleep", "infinity"]
