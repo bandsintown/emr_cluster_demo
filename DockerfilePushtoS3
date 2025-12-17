@@ -13,4 +13,8 @@ RUN apk add --no-cache \
     py3-boto3
 
 # Run the Python script automatically when container starts
-CMD ["python", "push_s3.py", "--json-mapping", "s3_mapping.json", "--image-tag", "$IMAGE_TAG", "--environment", "$ENV", "--root", "/"]
+CMD python push_s3.py \
+    --json-mapping /app/s3_mapping.json \
+    --image-tag "$IMAGE_TAG" \
+    --environment "$ENV" \
+    --root /
