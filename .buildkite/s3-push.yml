@@ -7,14 +7,14 @@ steps:
         # --- 1. CONSOLIDATED VARIABLE DEFINITION AND IMAGE CALCULATION ---
         # All variables that rely on each other MUST be in one shell block.
         -  |
-          IMAGE_URI="$$(buildkite-agent meta-data get IMAGE_URI)"
-          BUILD_TAG="$$(buildkite-agent meta-data get BUILD_TAG)"
+          IMAGE_URI="$(buildkite-agent meta-data get IMAGE_URI)"
+          BUILD_TAG="$(buildkite-agent meta-data get BUILD_TAG)"
           DOCKERFILE_PATH="DockerfilePushtoS3"
           BASE_DIR="."
           echo "--- Building Image ---"
           docker build \
             --file "$${DOCKERFILE_PATH}" \
-            --build-arg BASE_IMAGE="$${IMAGE_URI}:${BUILD_TAG}" \
+            --build-arg BASE_IMAGE="$${IMAGE_URI}:$${BUILD_TAG}" \
             -t my-new-image:latest \
             .
           echo "--- Running S3 upload container ---"
