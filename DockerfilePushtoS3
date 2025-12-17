@@ -1,0 +1,14 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+WORKDIR /app
+
+# Copy the Python script and JSON mapping
+COPY .buildkite/push_s3.py /app/
+COPY .buildkite/config/s3_mapping.json /app/
+
+# Install dependencies
+RUN pip install boto3
+
+# Run the Python script automatically when container starts
+CMD ["python", ".buildkite/push_s3.py", "--json-mapping", "/app/s3_mapping.json", "--image-tag", "$IMAGE_TAG", "--environment", "$ENV", "--root", "/"]
