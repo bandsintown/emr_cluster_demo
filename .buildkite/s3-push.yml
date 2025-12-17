@@ -1,22 +1,24 @@
 # rollback-pipeline.yml
 steps:
-    label: "Push to S3"
-    key: "push_to_s3"
-    depends_on: "setup_pipline"
-    commands:
-      # --- 1. CONSOLIDATED VARIABLE DEFINITION AND IMAGE CALCULATION ---
-      # All variables that rely on each other MUST be in one shell block.
-      -  |
-        IMAGE_URI="$$(buildkite-agent meta-data get IMAGE_URI)"
-        BUILD_TAG="$$(buildkite-agent meta-data get BUILD_TAG)"
-        DOCKERFILE_PATH="DockerfilePushtoS3"
-        BASE_DIR="."
-        echo "--- Building Image ---"
-        docker build \
-          --file "$${DOCKERFILE_PATH}" \
-          --build-arg BASE_IMAGE="$${IMAGE_URI}" \
-          -t my-new-image:latest \
-        docker run --rm \
-          -e ENV="dev" \
-          -e IMAGE_TAG= "$${BUILD_TAG}"
-          my-new-image:latest
+    - label: "Push to S3"
+      key: "push_to_s3"
+      depends_on: "setup_pipline"
+      commands:
+        # --- 1. CONSOLIDATED VARIABLE DEFINITION AND IMAGE CALCULATION ---
+        # All variables that rely on each other MUST be in one shell block.
+        -  |
+          IMAGE_URI="$$(buildkite-agent meta-data get IMAGE_URI)"
+          BUILD_TAG="$$(buildkite-agent meta-data get BUILD_TAG)"
+          DOCKERFILE_PATH="DockerfilePushtoS3"
+          BASE_DIR="."
+          echo "--- Building Image ---"
+          docker build \
+            --file "$${DOCKERFILE_PATH}" \
+            --build-arg BASE_IMAGE="$${IMAGE_URI}:${BUILD_TAG}" \
+            -t my-new-image:latest \
+            .
+          echo "--- Running S3 upload container ---"
+          docker run --rm \
+            -e ENV="dev" \
+            -e IMAGE_TAG= "$${BUILD_TAG}"
+            my-new-image:latest
