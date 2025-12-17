@@ -11,7 +11,10 @@ steps:
           BUILD_TAG="$(buildkite-agent meta-data get BUILD_TAG)"
           DOCKERFILE_PATH="DockerfilePushtoS3"
           BASE_DIR="."
-          echo "--- Building Image ---"
+          echo "===================================="
+          echo "Building uploader image from base:"
+          echo "  $${BASE_IMAGE}"
+          echo "===================================="
           docker build \
             --file "$${DOCKERFILE_PATH}" \
             --build-arg BASE_IMAGE="$${IMAGE_URI}:$${BUILD_TAG}" \
@@ -20,5 +23,5 @@ steps:
           echo "--- Running S3 upload container ---"
           docker run --rm \
             -e ENV="dev" \
-            -e IMAGE_TAG= "$${BUILD_TAG}"
+            -e IMAGE_TAG="$${BUILD_TAG}" \
             my-new-image:latest
