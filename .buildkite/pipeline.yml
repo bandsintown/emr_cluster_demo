@@ -48,32 +48,25 @@ steps:
         buildkite-agent meta-data set "AWS_REGION" "$${AWS_REGION}"
         buildkite-agent meta-data set "AWS_ACCOUNT_ID" "$${AWS_ACCOUNT_ID}"
 
-#  # --- 3. TRIGGER S3 PUSH PIPELINE (Optional Input + Trigger) ---
-#  - label: "❓ Trigger S3 Asset Push?"
-#    key: "ask_s3_push"
-#    prompt: "Do you want to extract and push the static assets to S3?"
-#    type: input
-#    depends_on: "build_and_push"
-#    fields:
-#      - text: "S3_CHOICE"
-#        default: "yes"
-#        options:
-#          - label: "Yes, push to S3"
-#            value: "yes"
-#          - label: "No, skip S3 push"
-#            value: "no"
-#
-#  - label: "⬆️ Trigger S3 Push Pipeline"
-#    key: "trigger_s3"
-#    trigger: "my-s3-pipeline"
-#    build:
-#      # Pass required information to the triggered pipeline
-#      env:
-#        SERVICE_NAME: "$$(buildkite-agent meta-data get SERVICE_NAME)"
-#        IMAGE_URI: "$$(buildkite-agent meta-data get IMAGE_URI)"
-#        BUILD_TAG: "$$(buildkite-agent meta-data get BUILD_TAG)"
-#        # Pass the region so the S3 script can use it
-#        AWS_REGION: "$$(buildkite-agent meta-data get AWS_REGION)"
-#    if: "$$(buildkite-agent meta-data get S3_CHOICE) == 'yes'"
+  # --- 3. TRIGGER S3 PUSH PIPELINE (Optional Input + Trigger) ---
+  - label: "❓ Trigger S3 Asset Push?"
+    key: "ask_s3_push"
+    prompt: "Do you want to extract and push the static assets to S3?"
+    type: input
+    depends_on: "build_and_push"
+    fields:
+      - text: "S3_CHOICE"
+        default: "yes"
+        options:
+          - label: "Yes, push to S3"
+            value: "yes"
+          - label: "No, skip S3 push"
+            value: "no"
 
-# ... (The rest of the triggers remain the same)
+  - label: "pipeline: Setup pipeline"
+    key: "setup_pipline"
+    depends_on: "ask_s3_push"
+    command: |
+          if [ "$$(buildkite-agent meta-data get "deploy-type")" == "push-to-s3-hdfs" ]; then
+            buildkite-agent pipeline upload .buildkite/s3-push.yml
+          fi
