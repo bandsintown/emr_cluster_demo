@@ -14,7 +14,6 @@ RUN apk add --no-cache \
 
 # Run the Python script automatically when container starts
 CMD python push_s3.py \
-    --json-mapping /app/s3_mapping.json \
     --image-tag "$IMAGE_TAG" \
     --environment "$ENV" \
     --root /

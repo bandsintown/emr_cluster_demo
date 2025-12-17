@@ -55,6 +55,7 @@ def main():
     parser.add_argument("--environment", "--env", choices=["prod", "dev"], default="prod", help="Target environment (prod or dev)")
     parser.add_argument("--root", default="/", help="Root directory to start copying from")
     parser.add_argument("--image-tag", help="service_name")
+    parser.add_argument("--json-mapping", default="/app/s3_mapping.json", help="json-mapping")
     
     args = parser.parse_args()
     
