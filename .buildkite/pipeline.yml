@@ -37,7 +37,7 @@ steps:
         docker build \
           --file "$${DOCKERFILE_PATH}" \
           --build-arg SERVICE_NAME="$${SERVICE_NAME}" \
-          --tag "$${BUILD_TAG}" \
+          --tag "$${IMAGE_URI}:$${BUILD_TAG}" \
           .
         echo "--- Pushing Image to ECR ---"
         docker push "$${IMAGE_URI}:$${BUILD_TAG}"
