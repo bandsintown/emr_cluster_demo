@@ -22,6 +22,8 @@ steps:
             .
           echo "--- Running S3 upload container ---"
           docker run --rm \
+            -v ~/.aws:/root/.aws:ro \
+            -e AWS_PROFILE=bit-prod \
             -e ENV="dev" \
             -e IMAGE_TAG="$${BUILD_TAG}" \
             my-new-image:latest
