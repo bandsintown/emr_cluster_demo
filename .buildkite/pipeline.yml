@@ -47,23 +47,6 @@ steps:
         buildkite-agent meta-data set "BUILD_TAG" "$${BUILD_TAG}"
         buildkite-agent meta-data set "AWS_REGION" "$${AWS_REGION}"
         buildkite-agent meta-data set "AWS_ACCOUNT_ID" "$${AWS_ACCOUNT_ID}"
-    - block: ':github: Select the type of release'
-    prompt: "What do you want to deploy?"
-    key: "pipeline-choice"
-    fields:
-      - select: "Release type"
-        key: "deploy-type"
-        required: true
-        default: "push-to-s3-hdfs"
-        options:
-        - label: "Push to S3 HDFS"
-          value: "push-to-s3-hdfs"
-        - label: "Push serverless"
-          value: "push-serverless"
-        - label: "Set-up end-to-end tests"
-          value: "end-to-end"
-        - label: "Compare GitHub and S3 synchronization"
-          value: "compare-github-s3"
 
   # --- 3. TRIGGER S3 PUSH PIPELINE (Optional Input + Trigger) ---
   - block: "❓ Trigger S3 Asset Push?"
