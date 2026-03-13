@@ -17,7 +17,7 @@ COPY . /src
 # Copy only the mapped files/dirs for SERVICE_NAME into /app/${SERVICE_NAME}/, preserving structure
 RUN set -euo pipefail; \
     apk add --no-cache python3; \
-    python3 - <<'PY'
+    python3 - <<'PY' \
 import json
 import os
 import shutil
