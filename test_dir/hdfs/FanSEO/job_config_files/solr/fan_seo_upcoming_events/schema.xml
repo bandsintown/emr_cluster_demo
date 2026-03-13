@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schema name="upcoming_events" version="1.5">
+  <field name="_version_" type="long" indexed="true" stored="true"/>
+  <uniqueKey>id</uniqueKey>
+
+  <field name="id" type="string" indexed="true" stored="true" required="false"/>
+  <field name="title" type="string" indexed="true" stored="true" required="false"/>
+  <field name="mediaId" type="int" indexed="true" stored="true" required="false"/>
+  <field name="numCollectedTickets" type="int" indexed="true" stored="true" required="false"/>
+  <field name="streamingEvent" type="boolean" indexed="true" stored="true" required="false"/>
+  <field name="rsvpCount" type="int" indexed="true" stored="true" required="false"/>
+  <field name="announcedAt" type="string" indexed="true" stored="true" required="false"/>
+  <field name="startsAt" type="string" indexed="true" stored="true" required="false"/>
+  <field name="endsAt" type="string" indexed="true" stored="true" required="false"/>
+  <field name="day" type="string" indexed="true" stored="true" required="false"/>
+  <field name="month" type="string" indexed="true" stored="true" required="false"/>
+  <field name="year" type="string" indexed="true" stored="true" required="false"/>
+  <field name="date" type="string" indexed="true" stored="true" required="false"/>
+  <field name="artistId" type="int" indexed="true" stored="true" required="false"/>
+  <field name="artistMediaId" type="int" indexed="true" stored="true" required="false"/>
+  <field name="artistName" type="string" indexed="true" stored="true" required="false"/>
+  <field name="artistNameSlug" type="string" indexed="true" stored="true" required="false"/>
+  <field name="artistNameFirstLetter" type="string" indexed="true" stored="true" required="false"/>
+  <field name="artistGenres" type="text_lowercase" indexed="true" stored="true" required="false" multiValued="true" />
+  <field name="artistOnTour" type="boolean" indexed="true" stored="true" required="false"/>
+  <field name="artistTrackerCount" type="int" indexed="true" stored="true" required="false"/>
+  <field name="venueName" type="string" indexed="true" stored="true" required="false"/>
+  <field name="city" type="string" indexed="true" stored="true" required="false"/>
+  <field name="venueCountry" type="string" indexed="true" stored="true" required="false"/>
+  <field name="latitude" type="double" indexed="true" stored="true" required="false"/>
+  <field name="longitude" type="double" indexed="true" stored="true" required="false"/>
+  <field name="streetAddress" type="string" indexed="true" stored="true" required="false"/>
+  <field name="venueAddress" type="string" indexed="true" stored="true" required="false"/>
+  <field name="venueRegion" type="string" indexed="true" stored="true" required="false"/>
+  <field name="venueLocation" type="string" indexed="true" stored="true" required="false"/>
+  <field name="venueLocationSlug" type="string" indexed="true" stored="true" required="false"/>
+  <field name="postalCode" type="string" indexed="true" stored="true" required="false"/>
+  <field name="region" type="string" indexed="true" stored="true" required="false"/>
+  <field name="latlong" type="location" indexed="true" stored="true" required="false"/>
+
+  <fieldType name="int" class="solr.TrieIntField" precisionStep="0" positionIncrementGap="0"/>
+  <fieldType name="double" class="solr.TrieDoubleField" precisionStep="0" positionIncrementGap="0"/>
+  <fieldType name="string" class="solr.TextField" sortMissingLast="true"/>
+  <fieldType name="boolean" class="solr.BoolField" sortMissingLast="true"/>
+  <fieldType name="location" class="solr.LatLonPointSpatialField" docValues="true"/>
+  <fieldType name="long" class="solr.TrieLongField" precisionStep="0" positionIncrementGap="0"/>
+  <fieldType name="text_lowercase" class="solr.TextField" positionIncrementGap="100">
+      <analyzer type="index">
+          <charFilter class="solr.MappingCharFilterFactory" mapping="mapping-ISOLatin1Accent.txt"/>
+          <tokenizer class="solr.StandardTokenizerFactory"/>
+          <filter class="solr.ASCIIFoldingFilterFactory" />
+          <filter class="solr.LowerCaseFilterFactory"/>
+      </analyzer>
+      <analyzer type="query">
+          <charFilter class="solr.MappingCharFilterFactory" mapping="mapping-ISOLatin1Accent.txt"/>
+          <tokenizer class="solr.StandardTokenizerFactory"/>
+          <filter class="solr.ASCIIFoldingFilterFactory" />
+          <filter class="solr.LowerCaseFilterFactory"/>
+      </analyzer>
+  </fieldType>
+</schema>
+

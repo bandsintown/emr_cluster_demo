@@ -1,72 +1,144 @@
 #!/usr/bin/env python3
+"""Push mapped files for a given service to the correct S3 bucket.
+
+- The service is passed as --image-tag (Buildkite image tag / service name).
+- The set of files/dirs to upload is taken from the JSON mapping file.
 """
-Push changed files from a GitHub commit to correct S3 bucket based on provided "environment".
-"""
-import os
-import sys
+
+from __future__ import annotations
+
 import argparse
-import boto3
+import json
+from pathlib import Path
+
+try:
+    import boto3  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover
+    boto3 = None  # type: ignore
+
+
+def _load_json_allowing_double_slash_comments(path: Path) -> dict:
+    raw = path.read_text(encoding="utf-8")
+    raw = "\n".join(
+        line for line in raw.splitlines() if not line.lstrip().startswith("//")
+    )
+    data = json.loads(raw)
+    if not isinstance(data, dict):
+        raise ValueError("Mapping JSON must be an object")
+    return data
+
+
+def _iter_files(root: Path, pattern: str) -> list[Path]:
+    """Return all files under root matching pattern.
+
+    - If pattern is a dir (endswith '/'), returns all files under it.
+    - If pattern is a file, returns that file.
+    """
+    # Normalize mapping entries like "hdfs/FanSEO/" or ".../file.hql"
+    rel = pattern.lstrip("/")
+    is_dir = rel.endswith("/")
+    target = (root / rel.rstrip("/")).resolve()
+
+    if is_dir:
+        if not target.exists():
+            return []
+        return [p for p in target.rglob("*") if p.is_file()]
+
+    return [target] if target.is_file() else []
 
 
 class GitHubS3Uploader:
-    """
-    Upload changed files from GitHub to S3 bucket based on environment.
-    """
-    def __init__(self, env="prod"):
+    def __init__(self, env: str = "prod"):
+        if boto3 is None:
+            raise SystemExit(
+                "Missing dependency: boto3. Install it (e.g., pip install boto3) in the runtime environment."
+            )
         session = boto3.Session(profile_name="bit-prod")
-        s3_resource = session.resource('s3')
+        s3_resource = session.resource("s3")
 
         if env == "prod":
             bucket_name = "bit-emr-cluster"
         elif env == "dev":
             bucket_name = "bit-emr-cluster-dev"
         else:
-            sys.exit(f"Unknown environment: {env}")
+            raise SystemExit(f"Unknown environment: {env}")
 
         print(f"\n--- Uploading files to s3://{bucket_name}")
         self.bucket = s3_resource.Bucket(bucket_name)  # type: ignore
-    
-    def upload_files(self, local_dir):
-        """Upload the specified files to S3."""
-        files_for_export = []
-        for root, dirs, files in os.walk(local_dir):
-            # Skip system dirs that cause errors
-            skip_dirs = ["/proc", "/sys", "/dev", "/tmp", "/run", "/var/run"]
-            if any(root.startswith(d) for d in skip_dirs):
+
+    def upload(self, *, local_root: Path, files: list[Path], dry_run: bool = False) -> None:
+        for f in files:
+            if not f.is_file():
                 continue
 
-            for file in files:
-                local_path = os.path.join(root, file)
-                relative_path = os.path.relpath(local_path, local_dir)
-                files_for_export.append(relative_path)
-                
-        for local_file in files_for_export:
-            # Check that the file exists
-            if os.path.exists(local_file):
-                print(f"  Uploading: {local_file}")
-                # self.bucket.upload_file(
-                #     Filename=local_file,
-                #     Key=local_file
-                # )
+            key = f.relative_to(local_root).as_posix()
+            print(f"  Uploading: {f} -> s3://{self.bucket.name}/{key}")
+            if dry_run:
+                continue
+
+            self.bucket.upload_file(Filename=str(f), Key=key)
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Push changed files from GitHub to S3 bucket")
-    parser.add_argument("--environment", "--env", choices=["prod", "dev"], default="prod", help="Target environment (prod or dev)")
-    parser.add_argument("--root", default="/", help="Root directory to start copying from")
-    parser.add_argument("--image-tag", help="service_name")
-    parser.add_argument("--json-mapping", default="/app/s3_mapping.json", help="json-mapping")
-    
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Push mapped files for a service to S3")
+    parser.add_argument(
+        "--environment",
+        "--env",
+        choices=["prod", "dev"],
+        default="prod",
+        help="Target environment (prod or dev)",
+    )
+    parser.add_argument(
+        "--root",
+        default=".",
+        help="Local repo root used to resolve mapping entries (default: current dir)",
+    )
+    parser.add_argument("--image-tag", required=True, help="Service name (must exist in mapping JSON)")
+    parser.add_argument(
+        "--json-mapping",
+        default="/app/s3_mapping.json",
+        help="Path to JSON mapping file (service -> list of files/dirs)",
+    )
+    parser.add_argument("--dry-run", action="store_true", help="Print what would be uploaded without uploading")
+
     args = parser.parse_args()
-    
-    print(f"=== S3 Upload Configuration ===")
+
+    local_root = Path(args.root).resolve()
+    mapping_path = Path(args.json_mapping).resolve()
+
+    if not mapping_path.exists():
+        raise SystemExit(f"Mapping file not found: {mapping_path}")
+
+    mapping = _load_json_allowing_double_slash_comments(mapping_path)
+
+    service = args.image_tag
+    if service not in mapping:
+        available = ", ".join(sorted(str(k) for k in mapping.keys()))
+        raise SystemExit(f"Unknown service '{service}'. Available: {available}")
+
+    entries = mapping[service]
+    if not isinstance(entries, list) or not all(isinstance(x, str) for x in entries):
+        raise SystemExit(f"Invalid mapping for '{service}': expected list of strings")
+
+    # Collect files to upload (dedupe, keep stable order)
+    seen: set[Path] = set()
+    files: list[Path] = []
+    for entry in entries:
+        for f in _iter_files(local_root, entry):
+            if f not in seen:
+                seen.add(f)
+                files.append(f)
+
+    print("=== S3 Upload Configuration ===")
     print(f"Environment: {args.environment.upper()}")
-    print(f"================================\n")
+    print(f"Service: {service}")
+    print(f"Mapping: {mapping_path}")
+    print(f"Root: {local_root}")
+    print(f"Files to upload: {len(files)}")
+    print("================================\n")
 
     uploader = GitHubS3Uploader(env=args.environment)
-    
-    # Upload files
-    uploader.upload_files(local_dir=".")
+    uploader.upload(local_root=local_root, files=files, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

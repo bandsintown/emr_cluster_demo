@@ -1,0 +1,26 @@
+{
+  "environment": "prod",
+  "cloudwatch": {
+    "log_group_name": "prod-fan-seo-site-solr-indexation",
+    "log_stream_suffix": "indexation",
+    "log_index_name": "fan-seo-site-solr-indexation"
+  },
+  "initial_sleep": 300,
+  "moving_average": {
+    "number_of_batches": 200,
+    "maximum_average": 250,
+    "sleeping_time": 30000
+  },
+  "fan_seo_upcoming_events": {
+    "config_name": "fan_seo_upcoming_events_config",
+    "num_shards": 1,
+    "max_shards_per_node": 1,
+    "format": "parquet",
+    "replication_factor": 3,
+    "pull_replicas": true,
+    "max_batch_size": 100,
+    "num_reducers": 2,
+    "input_dir": "s3://bit-emr-cluster/dev/rene/events",
+    "output_dir": "/fan_seo/cities/indexation_v2_out_fan_seo_upcoming_events/"
+  }
+}
