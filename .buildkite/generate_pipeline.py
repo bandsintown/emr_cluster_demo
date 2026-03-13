@@ -63,43 +63,46 @@ def main() -> None:
                 "commands": [
                     """set -euo pipefail
 
-# 1. Retrieve the selected value from Buildkite Meta-data
-SERVICE_NAME=$(buildkite-agent meta-data get "SERVICE_NAME")
+# Retrieve the selected value from Buildkite Meta-data
+# Use $$ to escape the variable for the shell
+SERVICE_NAME=$$(buildkite-agent meta-data get "SERVICE_NAME")
 
-if [ -z "${SERVICE_NAME}" ]; then
+if [ -z "$${SERVICE_NAME}" ]; then
   echo "Error: SERVICE_NAME is required but was not found in meta-data." >&2
   exit 1
 fi
 
 echo "--- Configuration ---"
-echo "Selected service: ${SERVICE_NAME}"
+echo "Selected service: $${SERVICE_NAME}"
 
 AWS_ACCOUNT_ID="004095192903"
 AWS_REGION="us-east-1"
 REPOSITORY_NAME="emr_cluster"
 
 # 2. Define/Calculate dependent variables
-BUILD_TAG="${BUILDKITE_COMMIT}_${SERVICE_NAME}"
-ECR_REGISTRY_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-IMAGE_URI="${ECR_REGISTRY_URI}/${REPOSITORY_NAME}"
+# Note: BUILDKITE_COMMIT is a standard env var, so single $ is usually fine, 
+# but $${SERVICE_NAME} needs the double $$
+BUILD_TAG="$${BUILDKITE_COMMIT}_$${SERVICE_NAME}"
+ECR_REGISTRY_URI="$${AWS_ACCOUNT_ID}.dkr.ecr.$${AWS_REGION}.amazonaws.com"
+IMAGE_URI="$${ECR_REGISTRY_URI}/$${REPOSITORY_NAME}"
 
-echo "Calculated Image URI: ${IMAGE_URI}:${BUILD_TAG}"
+echo "Calculated Image URI: $${IMAGE_URI}:$${BUILD_TAG}"
 
 echo "--- Building Image ---"
-docker build \
-  --file "Dockerfile" \
-  --build-arg SERVICE_NAME="${SERVICE_NAME}" \
-  --tag "${IMAGE_URI}:${BUILD_TAG}" \
+docker build \\
+  --file "Dockerfile" \\
+  --build-arg SERVICE_NAME="$${SERVICE_NAME}" \\
+  --tag "$${IMAGE_URI}:$${BUILD_TAG}" \\
   .
 
 echo "--- Pushing Image to ECR ---"
-docker push "${IMAGE_URI}:${BUILD_TAG}"
+docker push "$${IMAGE_URI}:$${BUILD_TAG}"
 
 # 3. Store for downstream steps
-buildkite-agent meta-data set "IMAGE_URI" "${IMAGE_URI}"
-buildkite-agent meta-data set "BUILD_TAG" "${BUILD_TAG}"
-buildkite-agent meta-data set "AWS_REGION" "${AWS_REGION}"
-buildkite-agent meta-data set "AWS_ACCOUNT_ID" "${AWS_ACCOUNT_ID}"
+buildkite-agent meta-data set "IMAGE_URI" "$${IMAGE_URI}"
+buildkite-agent meta-data set "BUILD_TAG" "$${BUILD_TAG}"
+buildkite-agent meta-data set "AWS_REGION" "$${AWS_REGION}"
+buildkite-agent meta-data set "AWS_ACCOUNT_ID" "$${AWS_ACCOUNT_ID}"
 """
                 ],
             },
