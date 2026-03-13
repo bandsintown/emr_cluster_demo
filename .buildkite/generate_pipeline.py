@@ -57,27 +57,23 @@ def main() -> None:
                 ],
             },
             {
-                "label": ":information_source: Persist SERVICE_NAME",
-                "key": "persist_service_name",
-                "depends_on": "get_service_name",
-                "command": """set -euo pipefail
-# Input step values are available via buildkite meta-data
-SERVICE_NAME=$$(buildkite-agent meta-data get "SERVICE_NAME")
-if [ -z "$${SERVICE_NAME}" ]; then
-  echo "SERVICE_NAME is required" >&2
-  exit 1
-fi
-# Re-set to ensure downstream steps/pipelines can rely on it
-buildkite-agent meta-data set "SERVICE_NAME" "$${SERVICE_NAME}"
-""",
-            },
-            {
                 "label": "🚀 Build & Push Docker Image for $$SERVICE_NAME",
                 "key": "build_and_push",
-                "depends_on": "persist_service_name",
+                "depends_on": "get_service_name",
                 "commands": [
-                    """# 1. Retrieve required variables from meta-data (persisted from input step)
-SERVICE_NAME=\"$$(buildkite-agent meta-data get \\\"SERVICE_NAME\\\")\"\n\nAWS_ACCOUNT_ID=\"004095192903\"\nAWS_REGION=\"us-east-1\"\n\n# 2. Define/Calculate dependent variables\nBUILD_TAG=\"${BUILDKITE_COMMIT}_$${SERVICE_NAME}\"\nECR_REGISTRY_URI=\"${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com\"\nREPOSITORY_NAME=\"emr_cluster\"\nIMAGE_URI=\"$${ECR_REGISTRY_URI}/$${REPOSITORY_NAME}\"\nDOCKERFILE_PATH=\"Dockerfile\"\nBASE_DIR=\".\"\n\necho \"Selected service: $${SERVICE_NAME}\"\necho \"Calculated Image URI: $${IMAGE_URI}:$${BUILD_TAG}\"\necho \"--- Building Image ---\"\ndocker build \\\n  --file \"$${DOCKERFILE_PATH}\" \\\n  --build-arg SERVICE_NAME=\"$${SERVICE_NAME}\" \\\n  --tag \"$${IMAGE_URI}:$${BUILD_TAG}\" \\\n  .\n\necho \"--- Pushing Image to ECR ---\"\ndocker push \"$${IMAGE_URI}:$${BUILD_TAG}\"\n\n# STORE FOR DOWNSTREAM STEPS\nbuildkite-agent meta-data set \"IMAGE_URI\" \"$${IMAGE_URI}\"\nbuildkite-agent meta-data set \"BUILD_TAG\" \"$${BUILD_TAG}\"\nbuildkite-agent meta-data set \"AWS_REGION\" \"$${AWS_REGION}\"\nbuildkite-agent meta-data set \"AWS_ACCOUNT_ID\" \"$${AWS_ACCOUNT_ID}\"\n"""
+                    """set -euo pipefail
+
+# SERVICE_NAME comes from the Input Step as an environment variable
+if [ -z \"${SERVICE_NAME:-}\" ]; then
+  echo \"SERVICE_NAME is required\" >&2
+  exit 1
+fi
+
+# Persist for downstream steps/pipelines
+buildkite-agent meta-data set \"SERVICE_NAME\" \"${SERVICE_NAME}\"
+
+AWS_ACCOUNT_ID=\"004095192903\"
+AWS_REGION=\"us-east-1\"\n\n# 2. Define/Calculate dependent variables\nBUILD_TAG=\"${BUILDKITE_COMMIT}_$${SERVICE_NAME}\"\nECR_REGISTRY_URI=\"${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com\"\nREPOSITORY_NAME=\"emr_cluster\"\nIMAGE_URI=\"$${ECR_REGISTRY_URI}/$${REPOSITORY_NAME}\"\nDOCKERFILE_PATH=\"Dockerfile\"\nBASE_DIR=\".\"\n\necho \"Selected service: $${SERVICE_NAME}\"\necho \"Calculated Image URI: $${IMAGE_URI}:$${BUILD_TAG}\"\necho \"--- Building Image ---\"\ndocker build \\\n  --file \"$${DOCKERFILE_PATH}\" \\\n  --build-arg SERVICE_NAME=\"$${SERVICE_NAME}\" \\\n  --tag \"$${IMAGE_URI}:$${BUILD_TAG}\" \\\n  .\n\necho \"--- Pushing Image to ECR ---\"\ndocker push \"$${IMAGE_URI}:$${BUILD_TAG}\"\n\n# STORE FOR DOWNSTREAM STEPS\nbuildkite-agent meta-data set \"IMAGE_URI\" \"$${IMAGE_URI}\"\nbuildkite-agent meta-data set \"BUILD_TAG\" \"$${BUILD_TAG}\"\nbuildkite-agent meta-data set \"AWS_REGION\" \"$${AWS_REGION}\"\nbuildkite-agent meta-data set \"AWS_ACCOUNT_ID\" \"$${AWS_ACCOUNT_ID}\"\n"""
                 ],
             },
             {
