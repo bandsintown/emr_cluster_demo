@@ -60,7 +60,16 @@ def main() -> None:
                 "label": ":information_source: Persist SERVICE_NAME",
                 "key": "persist_service_name",
                 "depends_on": "get_service_name",
-                "command": """if [ -z \"${SERVICE_NAME:-}\" ]; then\n  echo \"SERVICE_NAME is required\" >&2\n  exit 1\nfi\nbuildkite-agent meta-data set \"SERVICE_NAME\" \"${SERVICE_NAME}\"\n""",
+                "command": """set -euo pipefail
+# Input step values are available via buildkite meta-data
+SERVICE_NAME=$$(buildkite-agent meta-data get "SERVICE_NAME")
+if [ -z "$${SERVICE_NAME}" ]; then
+  echo "SERVICE_NAME is required" >&2
+  exit 1
+fi
+# Re-set to ensure downstream steps/pipelines can rely on it
+buildkite-agent meta-data set "SERVICE_NAME" "$${SERVICE_NAME}"
+""",
             },
             {
                 "label": "🚀 Build & Push Docker Image for $$SERVICE_NAME",
