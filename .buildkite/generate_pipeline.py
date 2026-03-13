@@ -45,8 +45,8 @@ def main() -> None:
             {
                 "label": "⚙️ Select Service to Build",
                 "key": "get_service_name",
-                "prompt": "Select the name of the service to build.",
                 "type": "input",
+                "prompt": "Select the name of the service to build.",
                 "fields": [
                     {
                         "select": "SERVICE_NAME",
@@ -57,36 +57,60 @@ def main() -> None:
                 ],
             },
             {
-                "label": "🚀 Build & Push Docker Image for $$SERVICE_NAME",
+                "label": "🚀 Build & Push Docker Image",
                 "key": "build_and_push",
                 "depends_on": "get_service_name",
-                "env": {
-                    "SERVICE_NAME": "${SERVICE_NAME}",
-                },
                 "commands": [
                     """set -euo pipefail
 
-# SERVICE_NAME comes from the Input Step
-if [ -z \"${SERVICE_NAME:-}\" ]; then
-  echo \"SERVICE_NAME is required\" >&2
+# 1. Retrieve the selected value from Buildkite Meta-data
+SERVICE_NAME=$(buildkite-agent meta-data get "SERVICE_NAME")
+
+if [ -z "${SERVICE_NAME}" ]; then
+  echo "Error: SERVICE_NAME is required but was not found in meta-data." >&2
   exit 1
 fi
 
-# Persist for downstream steps/pipelines
-buildkite-agent meta-data set \"SERVICE_NAME\" \"${SERVICE_NAME}\"
+echo "--- Configuration ---"
+echo "Selected service: ${SERVICE_NAME}"
 
-AWS_ACCOUNT_ID=\"004095192903\"
-AWS_REGION=\"us-east-1\"\n\n# 2. Define/Calculate dependent variables\nBUILD_TAG=\"${BUILDKITE_COMMIT}_$${SERVICE_NAME}\"\nECR_REGISTRY_URI=\"${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com\"\nREPOSITORY_NAME=\"emr_cluster\"\nIMAGE_URI=\"$${ECR_REGISTRY_URI}/$${REPOSITORY_NAME}\"\nDOCKERFILE_PATH=\"Dockerfile\"\nBASE_DIR=\".\"\n\necho \"Selected service: $${SERVICE_NAME}\"\necho \"Calculated Image URI: $${IMAGE_URI}:$${BUILD_TAG}\"\necho \"--- Building Image ---\"\ndocker build \\\n  --file \"$${DOCKERFILE_PATH}\" \\\n  --build-arg SERVICE_NAME=\"$${SERVICE_NAME}\" \\\n  --tag \"$${IMAGE_URI}:$${BUILD_TAG}\" \\\n  .\n\necho \"--- Pushing Image to ECR ---\"\ndocker push \"$${IMAGE_URI}:$${BUILD_TAG}\"\n\n# STORE FOR DOWNSTREAM STEPS\nbuildkite-agent meta-data set \"IMAGE_URI\" \"$${IMAGE_URI}\"\nbuildkite-agent meta-data set \"BUILD_TAG\" \"$${BUILD_TAG}\"\nbuildkite-agent meta-data set \"AWS_REGION\" \"$${AWS_REGION}\"\nbuildkite-agent meta-data set \"AWS_ACCOUNT_ID\" \"$${AWS_ACCOUNT_ID}\"\n"""
+AWS_ACCOUNT_ID="004095192903"
+AWS_REGION="us-east-1"
+REPOSITORY_NAME="emr_cluster"
+
+# 2. Define/Calculate dependent variables
+BUILD_TAG="${BUILDKITE_COMMIT}_${SERVICE_NAME}"
+ECR_REGISTRY_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+IMAGE_URI="${ECR_REGISTRY_URI}/${REPOSITORY_NAME}"
+
+echo "Calculated Image URI: ${IMAGE_URI}:${BUILD_TAG}"
+
+echo "--- Building Image ---"
+docker build \
+  --file "Dockerfile" \
+  --build-arg SERVICE_NAME="${SERVICE_NAME}" \
+  --tag "${IMAGE_URI}:${BUILD_TAG}" \
+  .
+
+echo "--- Pushing Image to ECR ---"
+docker push "${IMAGE_URI}:${BUILD_TAG}"
+
+# 3. Store for downstream steps
+buildkite-agent meta-data set "IMAGE_URI" "${IMAGE_URI}"
+buildkite-agent meta-data set "BUILD_TAG" "${BUILD_TAG}"
+buildkite-agent meta-data set "AWS_REGION" "${AWS_REGION}"
+buildkite-agent meta-data set "AWS_ACCOUNT_ID" "${AWS_ACCOUNT_ID}"
+"""
                 ],
             },
             {
                 "block": "❓ Trigger S3 Asset Push?",
-                "prompt": "Do you want to extract and push the static assets to S3?",
                 "key": "ask_s3_push",
                 "depends_on": "build_and_push",
+                "prompt": "Do you want to extract and push the static assets to S3?",
                 "fields": [
                     {
-                        "select": "S3_CHOICE",
+                        "select": "Choice",
                         "key": "deploy-type",
                         "default": "yes",
                         "required": True,
@@ -98,10 +122,14 @@ AWS_REGION=\"us-east-1\"\n\n# 2. Define/Calculate dependent variables\nBUILD_TAG
                 ],
             },
             {
-                "label": "pipeline: Setup pipeline",
-                "key": "setup_pipline",
+                "label": "🏗️ Setup S3 Pipeline",
+                "key": "setup_pipeline",
                 "depends_on": "ask_s3_push",
-                "command": """if [ \"$$(buildkite-agent meta-data get \\\"deploy-type\\\")\" == \"yes\" ]; then\n  buildkite-agent pipeline upload .buildkite/s3-push.yml\nfi\n""",
+                "command": (
+                    "if [ \"$(buildkite-agent meta-data get 'deploy-type')\" = \"yes\" ]; then\n"
+                    "  buildkite-agent pipeline upload .buildkite/s3-push.yml\n"
+                    "fi"
+                ),
             },
         ]
     }
