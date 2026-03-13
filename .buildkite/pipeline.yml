@@ -2,8 +2,6 @@
 
 steps:
   - label: ":pipeline: Generate pipeline from s3_mapping.json"
-          - label: "No, skip S3 push"
-      set -euo pipefail
-      python3 .buildkite/generate_pipeline.py | buildkite-agent pipeline upload
+    command: |
       set -euo pipefail
       python3 .buildkite/generate_pipeline.py | buildkite-agent pipeline upload
