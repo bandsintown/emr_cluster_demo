@@ -60,10 +60,13 @@ def main() -> None:
                 "label": "🚀 Build & Push Docker Image for $$SERVICE_NAME",
                 "key": "build_and_push",
                 "depends_on": "get_service_name",
+                "env": {
+                    "SERVICE_NAME": "${SERVICE_NAME}",
+                },
                 "commands": [
                     """set -euo pipefail
 
-# SERVICE_NAME comes from the Input Step as an environment variable
+# SERVICE_NAME comes from the Input Step
 if [ -z \"${SERVICE_NAME:-}\" ]; then
   echo \"SERVICE_NAME is required\" >&2
   exit 1
