@@ -20,7 +20,9 @@ from pathlib import Path
 
 def load_mapping(path: Path) -> dict:
     raw = path.read_text(encoding="utf-8")
-    raw = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
+    raw = "\n".join(
+        line for line in raw.splitlines() if not line.lstrip().startswith("//")
+    )
     data = json.loads(raw)
     if not isinstance(data, dict):
         raise SystemExit("s3_mapping.json must be a JSON object")
@@ -37,9 +39,17 @@ def main() -> None:
     if not service:
         raise SystemExit("SERVICE_NAME is required")
 
-    mapping_path = Path(os.environ.get("S3_MAPPING_PATH", "/src/.buildkite/config/s3_mapping.json"))
+    mapping_path = Path(
+        os.environ.get("S3_MAPPING_PATH", "/src/.buildkite/config/s3_mapping.json")
+    )
     mapping_root = Path(os.environ.get("MAPPING_ROOT", "/src")).resolve()
     out_root = Path(os.environ.get("OUT_ROOT", "/app")).resolve() / service
+    strict = os.environ.get("STRICT_MISSING", "0") == "1"
+
+    print(f"[stage] service={service}")
+    print(f"[stage] mapping_path={mapping_path}")
+    print(f"[stage] mapping_root={mapping_root}")
+    print(f"[stage] out_root={out_root}")
 
     mapping = load_mapping(mapping_path)
     paths = mapping.get(service)
@@ -48,23 +58,38 @@ def main() -> None:
 
     out_root.mkdir(parents=True, exist_ok=True)
 
+    copied = 0
+    missing: list[str] = []
+
     for entry in paths:
         rel = entry.lstrip("/")
         if rel.endswith("/"):
             base = (mapping_root / rel.rstrip("/")).resolve()
             if not base.exists():
+                missing.append(entry)
                 continue
             for f in base.rglob("*"):
                 if f.is_file():
                     dest = out_root / f.relative_to(mapping_root)
                     copy_file(f, dest)
+                    copied += 1
         else:
             f = (mapping_root / rel).resolve()
-            if f.is_file():
-                dest = out_root / f.relative_to(mapping_root)
-                copy_file(f, dest)
+            if not f.is_file():
+                missing.append(entry)
+                continue
+            dest = out_root / f.relative_to(mapping_root)
+            copy_file(f, dest)
+            copied += 1
+
+    for m in missing:
+        msg = f"[stage] missing mapped path: {m}"
+        if strict:
+            raise SystemExit(msg)
+        print(msg)
+
+    print(f"[stage] copied_files={copied}")
 
 
 if __name__ == "__main__":
     main()
-
