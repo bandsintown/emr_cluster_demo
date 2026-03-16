@@ -79,6 +79,12 @@ class GitHubS3Uploader:
             self.bucket.upload_file(Filename=str(f), Key=key)
 
 
+def _service_from_image_tag(image_tag: str) -> str:
+    # Accept either a plain service name or a build tag like '<sha>_<service>'
+    # Use rsplit so service names containing '_' still work.
+    return image_tag.rsplit("_", 1)[-1]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Push mapped files for a service to S3")
     parser.add_argument(
@@ -111,10 +117,10 @@ def main() -> None:
 
     mapping = _load_json_allowing_double_slash_comments(mapping_path)
 
-    service = args.image_tag
+    service = _service_from_image_tag(args.image_tag)
     if service not in mapping:
         available = ", ".join(sorted(str(k) for k in mapping.keys()))
-        raise SystemExit(f"Unknown service '{service}'. Available: {available}")
+        raise SystemExit(f"Unknown service '{args.image_tag}'. Available: {available}")
 
     entries = mapping[service]
     if not isinstance(entries, list) or not all(isinstance(x, str) for x in entries):
