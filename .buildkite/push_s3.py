@@ -85,6 +85,24 @@ def _service_from_image_tag(image_tag: str) -> str:
     return image_tag.rsplit("_", 1)[-1]
 
 
+def _resolve_mapping_root(local_root: Path, entries: list[str], prefix: str | None, service: str) -> Path:
+    """Determine where mapping paths live.
+
+    Priority:
+    1) If /app/<service> exists (staged image layout), use that.
+    2) If prefix is provided, use local_root/prefix.
+    3) Otherwise use local_root.
+    """
+    staged = (Path("/app") / service).resolve()
+    if staged.exists():
+        return staged
+
+    if prefix:
+        return (local_root / prefix).resolve()
+
+    return local_root
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Push mapped files for a service to S3")
     parser.add_argument(
@@ -104,6 +122,10 @@ def main() -> None:
         "--json-mapping",
         default="/app/s3_mapping.json",
         help="Path to JSON mapping file (service -> list of files/dirs)",
+    )
+    parser.add_argument(
+        "--mapping-root-prefix",
+        help="Subdirectory under the repo root where mapping entries are located",
     )
     parser.add_argument("--dry-run", action="store_true", help="Print what would be uploaded without uploading")
 
@@ -126,11 +148,15 @@ def main() -> None:
     if not isinstance(entries, list) or not all(isinstance(x, str) for x in entries):
         raise SystemExit(f"Invalid mapping for '{service}': expected list of strings")
 
+    mapping_root = _resolve_mapping_root(local_root, entries, args.mapping_root_prefix, service)
+
     # Collect files to upload (dedupe, keep stable order)
     seen: set[Path] = set()
     files: list[Path] = []
     for entry in entries:
-        for f in _iter_files(local_root, entry):
+        for f in _iter_files(mapping_root, entry):
+            # If we are using staged root (/app/<service>), mapping entries should be relative
+            # to that root. Strip any leading directories like 'hdfs/' already present.
             if f not in seen:
                 seen.add(f)
                 files.append(f)
@@ -144,7 +170,7 @@ def main() -> None:
     print("================================\n")
 
     uploader = GitHubS3Uploader(env=args.environment)
-    uploader.upload(local_root=local_root, files=files, dry_run=args.dry_run)
+    uploader.upload(local_root=mapping_root, files=files, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":
