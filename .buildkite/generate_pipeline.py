@@ -101,6 +101,33 @@ def main() -> None:
                     "fi"
                 ),
             },
+            {
+                "block": "⏪ Roll back to a previous image?",
+                "key": "ask_rollback",
+                "depends_on": "setup_pipeline",
+                "fields": [
+                    {
+                        "select": "Rollback",
+                        "key": "do-rollback",
+                        "default": "no",
+                        "required": True,
+                        "options": [
+                            {"label": "No", "value": "no"},
+                            {"label": "Yes", "value": "yes"},
+                        ],
+                    }
+                ],
+            },
+            {
+                "label": "⏪ Setup rollback pipeline",
+                "key": "setup_rollback",
+                "depends_on": "ask_rollback",
+                "command": (
+                    "if [ \"$$(buildkite-agent meta-data get 'do-rollback')\" = 'yes' ]; then\n"
+                    "  buildkite-agent pipeline upload .buildkite/rollback-pipeline.yml\n"
+                    "fi"
+                ),
+            },
         ]
     }
 
