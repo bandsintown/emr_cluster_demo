@@ -1,29 +1,28 @@
 # rollback-pipeline.yml
 steps:
-    - label: "Push to S3"
-      key: "push_to_s3"
-      depends_on: "setup_pipline"
-      commands:
-        # --- 1. CONSOLIDATED VARIABLE DEFINITION AND IMAGE CALCULATION ---
-        # All variables that rely on each other MUST be in one shell block.
-        -  |
-          IMAGE_URI="$(buildkite-agent meta-data get IMAGE_URI)"
-          BUILD_TAG="$(buildkite-agent meta-data get BUILD_TAG)"
-          DOCKERFILE_PATH="DockerfilePushtoS3"
-          BASE_DIR="."
-          echo "===================================="
-          echo "Building uploader image from base:"
-          echo "  $${BASE_IMAGE}"
-          echo "===================================="
-          docker build \
-            --file "$${DOCKERFILE_PATH}" \
-            --build-arg BASE_IMAGE="$${IMAGE_URI}:$${BUILD_TAG}" \
-            -t my-new-image:latest \
-            .
-          echo "--- Running S3 upload container ---"
-          docker run --rm \
-            -v ~/.aws:/root/.aws:ro \
-            -e AWS_PROFILE=bit-prod \
-            -e ENV="dev" \
-            -e IMAGE_TAG="$${BUILD_TAG}" \
-            my-new-image:latest
+  - label: "Push to S3"
+    key: "push_to_s3"
+    commands:
+      # --- 1. CONSOLIDATED VARIABLE DEFINITION AND IMAGE CALCULATION ---
+      # All variables that rely on each other MUST be in one shell block.
+      -  |
+        IMAGE_URI="$(buildkite-agent meta-data get IMAGE_URI)"
+        BUILD_TAG="$(buildkite-agent meta-data get BUILD_TAG)"
+        DOCKERFILE_PATH="DockerfilePushtoS3"
+        BASE_DIR="."
+        echo "===================================="
+        echo "Building uploader image from base:"
+        echo "  $${IMAGE_URI}:$${BUILD_TAG}"
+        echo "===================================="
+        docker build \
+          --file "$${DOCKERFILE_PATH}" \
+          --build-arg BASE_IMAGE="$${IMAGE_URI}:$${BUILD_TAG}" \
+          -t my-new-image:latest \
+          .
+        echo "--- Running S3 upload container ---"
+        docker run --rm \
+          -v ~/.aws:/root/.aws:ro \
+          -e AWS_PROFILE=bit-prod \
+          -e ENV="dev" \
+          -e IMAGE_TAG="$${BUILD_TAG}" \
+          my-new-image:latest
