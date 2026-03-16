@@ -1,5 +1,4 @@
 import boto3
-from datetime import datetime
 
 from pyspark import SparkFiles
 from pyspark.conf import SparkConf

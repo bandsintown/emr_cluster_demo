@@ -1,7 +1,5 @@
 import boto3
 import json
-from datetime import datetime
-from operator import itemgetter
 import concurrent.futures
 import time 
 
@@ -213,7 +211,6 @@ def main():
     import jinja2
     import city_page
     import city_pages_context_builder
-    from pyspark_schemas import POPULAR_CITIES_SCHEMA
 
     jinja_env = jinja2.Environment(loader=jinja2.DictLoader(city_page.TEMPLATES))
     footer_artists_collection = spark.read.parquet(FOOTER_ARTISTS_PATH).collect()
@@ -224,7 +221,7 @@ def main():
     cities_df.rdd.foreachPartition(
         lambda iterator: process_partition(
             iterator, 
-            jinja_env, 
+            jinja_env,
             city_pages_context_builder, 
             footer_artists_collection
         )
