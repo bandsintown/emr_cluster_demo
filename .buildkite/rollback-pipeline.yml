@@ -1,4 +1,3 @@
-# rollback-pipeline.yml
 steps:
   # --- 1. SELECT SERVICE TO ROLL BACK ---
   - label: "⚙️ Select Service to Roll Back"
