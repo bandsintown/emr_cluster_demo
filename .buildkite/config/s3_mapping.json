@@ -4,9 +4,9 @@
       "hdfs/FanArtistReleases"
   ],
   "DailyArtistMetrics": [
-      "hdfs/job_config_files/artistanalytics/py/",
-      "hdfs/job_config_files/artistanalytics/bit_daily_artist_dashboard_ticketgeoip.hql",
-      "hdfs/job_config_files/artistanalytics/bit_daily_artist_dasboard_v2_elp_playmycity_v2.hql",
-       "hdfs/job_config_files/artistanalytics/py/sqoop_export_params_promoters_db.py"
+      "hdfs/artistanalytics/py/",
+      "hdfs/artistanalytics/bit_daily_artist_dashboard_ticketgeoip.hql",
+      "hdfs/artistanalytics/bit_daily_artist_dasboard_v2_elp_playmycity_v2.hql",
+       "hdfs/artistanalytics/py/sqoop_export_params_promoters_db.py"
   ]
 }
