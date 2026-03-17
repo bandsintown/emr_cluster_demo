@@ -1,7 +1,6 @@
 steps:
-  # --- 1. SELECT SERVICE TO ROLL BACK ---
   - label: "⚙️ Select Service to Roll Back"
-    key: "get_service_name_rb"
+    key: "rb_select_service"
     type: input
     fields:
       - select: "SERVICE_NAME"
@@ -13,14 +12,14 @@ steps:
           - label: "DailyArtistMetrics"
             value: "DailyArtistMetrics"
 
-  # --- 2. FETCH RECENT ECR TAGS ---
-  - label: "🔎 Fetch recent ECR tags"
-    key: "fetch_tags"
-    depends_on: "get_service_name_rb"
+  - label: "🔎 Fetch recent ECR tags and prompt"
+    key: "rb_fetch_and_prompt"
+    depends_on: "rb_select_service"
     command: |
       set -euo pipefail
 
       SERVICE_NAME="${SERVICE_NAME}"
+      AWS_ACCOUNT_ID="004095192903"
       AWS_REGION="us-east-1"
       ECR_REPOSITORY="emr_cluster"
 
@@ -34,48 +33,58 @@ steps:
         fi
       fi
 
-      echo "--- Recent tags for service: ${SERVICE_NAME} ---"
-      TAGS=$(python3 .buildkite/list_ecr_tags.py --region "${AWS_REGION}" --repo "${ECR_REPOSITORY}" --service "${SERVICE_NAME}" --limit 30 | tr '\n' ',' | sed 's/,$//')
+      # Fetch tags (newest first) for this service
+      mapfile -t TAGS < <(python3 .buildkite/list_ecr_tags.py \
+        --region "${AWS_REGION}" \
+        --repo "${ECR_REPOSITORY}" \
+        --service "${SERVICE_NAME}" \
+        --limit 30)
 
-      if [ -z "${TAGS}" ]; then
+      if [ "${#TAGS[@]}" -eq 0 ]; then
         echo "No tags found for service ${SERVICE_NAME}" >&2
         exit 1
       fi
 
-      # Store for the next input step
-      buildkite-agent meta-data set "ROLLBACK_TAG_OPTIONS" "${TAGS}"
-      buildkite-agent meta-data set "SERVICE_NAME" "${SERVICE_NAME}"
+      # Persist the service selection for the execute step
+      buildkite-agent meta-data set "RB_SERVICE_NAME" "${SERVICE_NAME}"
+      buildkite-agent meta-data set "RB_AWS_ACCOUNT_ID" "${AWS_ACCOUNT_ID}"
+      buildkite-agent meta-data set "RB_AWS_REGION" "${AWS_REGION}"
+      buildkite-agent meta-data set "RB_ECR_REPOSITORY" "${ECR_REPOSITORY}"
 
-  # --- 3. CHOOSE ROLLBACK TAG ---
-  - label: "⏪ Choose Rollback Tag"
-    key: "choose_tag"
-    depends_on: "fetch_tags"
-    type: input
-    prompt: "Pick the image tag to roll back to (most recent first)."
-    fields:
-      - select: "ROLLBACK_TAG"
-        key: "ROLLBACK_TAG"
-        required: true
-        options:
-          - label: "${ROLLBACK_TAG_OPTIONS}"
-            value: "${ROLLBACK_TAG_OPTIONS}"
+      # Generate a pipeline snippet with a proper dropdown of tags
+      {
+        echo "steps:";
+        echo "  - label: \"⏪ Choose Rollback Tag\"";
+        echo "    key: \"rb_choose_tag\"";
+        echo "    type: input";
+        echo "    prompt: \"Pick the image tag to roll back to (most recent first).\"";
+        echo "    fields:";
+        echo "      - select: \"ROLLBACK_TAG\"";
+        echo "        key: \"ROLLBACK_TAG\"";
+        echo "        required: true";
+        echo "        options:";
+        for t in "${TAGS[@]}"; do
+          # label/value must be YAML strings
+          printf '          - label: "%s"\n' "${t}";
+          printf '            value: "%s"\n' "${t}";
+        done
+        echo "";
+        echo "  - label: \"⏪ Execute rollback\"";
+        echo "    key: \"rb_execute\"";
+        echo "    depends_on: \"rb_choose_tag\"";
+        echo "    command: |";
+        echo "      set -euo pipefail";
+        echo "";
+        echo "      SERVICE_NAME=\"$$(buildkite-agent meta-data get RB_SERVICE_NAME)\"";
+        echo "      AWS_ACCOUNT_ID=\"$$(buildkite-agent meta-data get RB_AWS_ACCOUNT_ID)\"";
+        echo "      AWS_REGION=\"$$(buildkite-agent meta-data get RB_AWS_REGION)\"";
+        echo "      ECR_REPOSITORY=\"$$(buildkite-agent meta-data get RB_ECR_REPOSITORY)\"";
+        echo "      ROLLBACK_TAG=\"${ROLLBACK_TAG}\"";
+        echo "";
+        echo "      ECR_URI=\"${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com\"";
+        echo "      ROLLBACK_IMAGE_URI=\"${ECR_URI}/${ECR_REPOSITORY}:${ROLLBACK_TAG}\"";
+        echo "";
+        echo "      echo \"Rolling back service ${SERVICE_NAME} to: ${ROLLBACK_IMAGE_URI}\"";
+        echo "      echo \"TODO: add deployment logic here\"";
+      } | buildkite-agent pipeline upload
 
-  # --- 4. EXECUTE ROLLBACK ---
-  - label: "⏪ Execute rollback"
-    key: "execute_rollback"
-    depends_on: "choose_tag"
-    command: |
-      set -euo pipefail
-
-      SERVICE_NAME="$$(buildkite-agent meta-data get "SERVICE_NAME")"
-      ROLLBACK_TAG="${ROLLBACK_TAG}"
-
-      AWS_ACCOUNT_ID="004095192903"
-      AWS_REGION="us-east-1"
-      ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-      ECR_REPOSITORY="emr_cluster"
-
-      ROLLBACK_IMAGE_URI="${ECR_URI}/${ECR_REPOSITORY}:${ROLLBACK_TAG}"
-
-      echo "Rolling back service ${SERVICE_NAME} to: ${ROLLBACK_IMAGE_URI}"
-      echo "TODO: add deployment logic here"
