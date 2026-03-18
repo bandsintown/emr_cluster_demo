@@ -36,7 +36,7 @@ def main() -> None:
             "--region",
             args.region,
             "--repository-name",
-            args.repo,
+            "emr_cluster",
             "--query",
             "imageDetails[*].{pushedAt:imagePushedAt,tags:imageTags}",
             "--output",
