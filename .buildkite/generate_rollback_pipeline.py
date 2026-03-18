@@ -28,6 +28,8 @@ def _yaml_escape(s: str) -> str:
 def main() -> None:
     services = _load_service_names()
 
+    default_service = services[0]
+
     service_options = "\n".join(
         f"          - label: \"{_yaml_escape(s)}\"\n            value: \"{_yaml_escape(s)}\""
         for s in services
@@ -42,6 +44,7 @@ def main() -> None:
       - select: \"SERVICE_NAME\"
         key: \"SERVICE_NAME\"
         required: true
+        default: \""" + _yaml_escape(default_service) + """\"
         options:
 """
         + service_options
@@ -53,7 +56,7 @@ def main() -> None:
     command: |
       set -euo pipefail
 
-      SERVICE_NAME="$(buildkite-agent meta-data get 'SERVICE_NAME')"
+      SERVICE_NAME=\"${SERVICE_NAME:-}\"
       AWS_REGION=\"us-east-1\"
       ECR_REPOSITORY=\"emr_cluster\"
 
