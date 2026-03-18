@@ -21,222 +21,120 @@ def _load_service_names() -> list[str]:
     return names
 
 
-def _yaml_quote(s: str) -> str:
-    return '"' + s.replace('"', '\\"') + '"'
-
-
-def _emit_block_scalar(key: str, text: str, indent: int) -> None:
-    sp = "  " * indent
-    print(f"{sp}{key}: |")
-    for line in text.splitlines():
-        print(f"{sp}  {line}")
-
-
-def _emit(obj, indent: int = 0) -> None:
-    sp = "  " * indent
-
-    if isinstance(obj, dict):
-        for k, v in obj.items():
-            # Emit multi-line commands as block scalars, Buildkite/YAML-friendly
-            if k in {"command", "commands"} and isinstance(v, str) and "\n" in v:
-                _emit_block_scalar(k, v.rstrip("\n"), indent)
-                continue
-
-            if isinstance(v, (dict, list)):
-                print(f"{sp}{k}:")
-                _emit(v, indent + 1)
-            else:
-                if isinstance(v, str):
-                    print(f"{sp}{k}: {_yaml_quote(v)}")
-                elif v is True:
-                    print(f"{sp}{k}: true")
-                elif v is False:
-                    print(f"{sp}{k}: false")
-                elif v is None:
-                    print(f"{sp}{k}: null")
-                else:
-                    print(f"{sp}{k}: {v}")
-        return
-
-    if isinstance(obj, list):
-        for item in obj:
-            if isinstance(item, dict):
-                # Emit "- key: value" style to avoid a bare "-" line
-                first = True
-                for k, v in item.items():
-                    if first:
-                        first = False
-                        if k == "command" and isinstance(v, str) and "\n" in v:
-                            print(f"{sp}- {k}: |")
-                            for line in v.rstrip("\n").splitlines():
-                                print(f"{sp}    {line}")
-                            continue
-                        if isinstance(v, (dict, list)):
-                            print(f"{sp}- {k}:")
-                            _emit(v, indent + 2)
-                        else:
-                            if isinstance(v, str):
-                                print(f"{sp}- {k}: {_yaml_quote(v)}")
-                            elif v is True:
-                                print(f"{sp}- {k}: true")
-                            elif v is False:
-                                print(f"{sp}- {k}: false")
-                            elif v is None:
-                                print(f"{sp}- {k}: null")
-                            else:
-                                print(f"{sp}- {k}: {v}")
-                    else:
-                        if k == "command" and isinstance(v, str) and "\n" in v:
-                            print(f"{sp}  {k}: |")
-                            for line in v.rstrip("\n").splitlines():
-                                print(f"{sp}    {line}")
-                            continue
-                        if isinstance(v, (dict, list)):
-                            print(f"{sp}  {k}:")
-                            _emit(v, indent + 2)
-                        else:
-                            if isinstance(v, str):
-                                print(f"{sp}  {k}: {_yaml_quote(v)}")
-                            elif v is True:
-                                print(f"{sp}  {k}: true")
-                            elif v is False:
-                                print(f"{sp}  {k}: false")
-                            elif v is None:
-                                print(f"{sp}  {k}: null")
-                            else:
-                                print(f"{sp}  {k}: {v}")
-                continue
-
-            if isinstance(item, (dict, list)):
-                print(f"{sp}-")
-                _emit(item, indent + 1)
-            else:
-                if isinstance(item, str):
-                    print(f"{sp}- {_yaml_quote(item)}")
-                else:
-                    print(f"{sp}- {item}")
-        return
-
-    raise TypeError(f"Unsupported type: {type(obj)}")
+def _yaml_escape(s: str) -> str:
+    return s.replace('"', '\\"')
 
 
 def main() -> None:
     services = _load_service_names()
 
-    persist_service_cmd = """set -euo pipefail
-if [ -z "${SERVICE_NAME:-}" ]; then
-  echo "SERVICE_NAME is required" >&2
-  exit 1
-fi
-buildkite-agent meta-data set RB_SERVICE_NAME "${SERVICE_NAME}"
+    service_options = "\n".join(
+        f"          - label: \"{_yaml_escape(s)}\"\n            value: \"{_yaml_escape(s)}\""
+        for s in services
+    )
+
+    # Keep the generated YAML minimal and avoid any banner/comments on stdout.
+    print(
+        """steps:
+  - label: \"Select Service to Roll Back\"
+    key: \"rb_select_service\"
+    type: input
+    fields:
+      - select: \"SERVICE_NAME\"
+        key: \"SERVICE_NAME\"
+        required: true
+        options:
 """
+        + service_options
+        + """
 
-    fetch_and_prompt_cmd = """set -euo pipefail
+  - label: \"Persist service selection\"
+    key: \"rb_persist_service\"
+    depends_on: \"rb_select_service\"
+    command: |
+      set -euo pipefail
+      : \"${SERVICE_NAME:?SERVICE_NAME is required}\"
+      buildkite-agent meta-data set RB_SERVICE_NAME \"${SERVICE_NAME}\"
 
-SERVICE_NAME="$$(buildkite-agent meta-data get RB_SERVICE_NAME)"
-AWS_ACCOUNT_ID="004095192903"
-AWS_REGION="us-east-1"
-ECR_REPOSITORY="emr_cluster"
+  - label: \"Fetch recent ECR tags\"
+    key: \"rb_fetch_and_prompt\"
+    depends_on: \"rb_persist_service\"
+    command: |
+      set -euo pipefail
 
-if [ -z "${SERVICE_NAME}" ]; then
-  echo "RB_SERVICE_NAME is required" >&2
-  exit 1
-fi
+      SERVICE_NAME=\"$$(buildkite-agent meta-data get RB_SERVICE_NAME)\"
+      AWS_ACCOUNT_ID=\"004095192903\"
+      AWS_REGION=\"us-east-1\"
+      ECR_REPOSITORY=\"emr_cluster\"
 
-if ! command -v aws >/dev/null 2>&1; then
-  if command -v apk >/dev/null 2>&1; then
-    apk add --no-cache aws-cli >/dev/null
-  else
-    echo "aws CLI not found on agent" >&2
-    exit 1
-  fi
-fi
+      if ! command -v aws >/dev/null 2>&1; then
+        if command -v apk >/dev/null 2>&1; then
+          apk add --no-cache aws-cli >/dev/null
+        else
+          echo \"aws CLI not found on agent\" >&2
+          exit 1
+        fi
+      fi
 
-TAGS="$$(python3 .buildkite/list_ecr_tags.py \
-  --region "${AWS_REGION}" \
-  --repo "${ECR_REPOSITORY}" \
-  --service "${SERVICE_NAME}" \
-  --limit 30)"
+      TAGS=\"$$(python3 .buildkite/list_ecr_tags.py \\
+        --region \"${AWS_REGION}\" \\
+        --repo \"${ECR_REPOSITORY}\" \\
+        --service \"${SERVICE_NAME}\" \\
+        --limit 30)\"
 
-if [ -z "${TAGS}" ]; then
-  echo "No tags found for service ${SERVICE_NAME}" >&2
-  exit 1
-fi
+      if [ -z \"${TAGS}\" ]; then
+        echo \"No tags found for service ${SERVICE_NAME}\" >&2
+        exit 1
+      fi
 
-buildkite-agent meta-data set RB_AWS_ACCOUNT_ID "${AWS_ACCOUNT_ID}"
-buildkite-agent meta-data set RB_AWS_REGION "${AWS_REGION}"
-buildkite-agent meta-data set RB_ECR_REPOSITORY "${ECR_REPOSITORY}"
+      buildkite-agent meta-data set RB_AWS_ACCOUNT_ID \"${AWS_ACCOUNT_ID}\"
+      buildkite-agent meta-data set RB_AWS_REGION \"${AWS_REGION}\"
+      buildkite-agent meta-data set RB_ECR_REPOSITORY \"${ECR_REPOSITORY}\"
 
-{
-  echo "steps:";
-  echo "  - label: \"Choose Rollback Tag\"";
-  echo "    key: \"rb_choose_tag\"";
-  echo "    type: input";
-  echo "    prompt: \"Pick the image tag to roll back to (most recent first).\"";
-  echo "    fields:";
-  echo "      - select: \"ROLLBACK_TAG\"";
-  echo "        key: \"ROLLBACK_TAG\"";
-  echo "        required: true";
-  echo "        options:";
+      SNIPPET=/tmp/rollback-snippet.yml
+      {
+        cat <<'YAML'
+steps:
+  - label: "Choose Rollback Tag"
+    key: "rb_choose_tag"
+    type: input
+    prompt: "Pick the image tag to roll back to (most recent first)."
+    fields:
+      - select: "ROLLBACK_TAG"
+        key: "ROLLBACK_TAG"
+        required: true
+        options:
+__TAG_OPTIONS__
 
-  printf '%s\\n' "${TAGS}" | while IFS= read -r t; do
-    [ -z "${t}" ] && continue
-    esc="${t//\"/\\\"}"
-    printf '          - label: "%s"\\n' "${esc}"
-    printf '            value: "%s"\\n' "${esc}"
-  done
+  - label: "Execute rollback"
+    key: "rb_execute"
+    depends_on: "rb_choose_tag"
+    command: |
+      set -euo pipefail
 
-  echo "";
-  echo "  - label: \"Execute rollback\"";
-  echo "    key: \"rb_execute\"";
-  echo "    depends_on: \"rb_choose_tag\"";
-  echo "    command: |";
-  echo "      set -euo pipefail";
-  echo "";
-  echo "      SERVICE_NAME=\"$$(buildkite-agent meta-data get RB_SERVICE_NAME)\"";
-  echo "      AWS_ACCOUNT_ID=\"$$(buildkite-agent meta-data get RB_AWS_ACCOUNT_ID)\"";
-  echo "      AWS_REGION=\"$$(buildkite-agent meta-data get RB_AWS_REGION)\"";
-  echo "      ECR_REPOSITORY=\"$$(buildkite-agent meta-data get RB_ECR_REPOSITORY)\"";
-  echo "      ROLLBACK_TAG=\"${ROLLBACK_TAG}\"";
-  echo "";
-  echo "      ECR_URI=\"${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com\"";
-  echo "      ROLLBACK_IMAGE_URI=\"${ECR_URI}/${ECR_REPOSITORY}:${ROLLBACK_TAG}\"";
-  echo "";
-  echo "      echo \"Rolling back service ${SERVICE_NAME} to: ${ROLLBACK_IMAGE_URI}\"";
-} | buildkite-agent pipeline upload
+      SERVICE_NAME="$$(buildkite-agent meta-data get RB_SERVICE_NAME)"
+      AWS_ACCOUNT_ID="$$(buildkite-agent meta-data get RB_AWS_ACCOUNT_ID)"
+      AWS_REGION="$$(buildkite-agent meta-data get RB_AWS_REGION)"
+      ECR_REPOSITORY="$$(buildkite-agent meta-data get RB_ECR_REPOSITORY)"
+      ROLLBACK_TAG="${ROLLBACK_TAG}"
+
+      ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+      ROLLBACK_IMAGE_URI="${ECR_URI}/${ECR_REPOSITORY}:${ROLLBACK_TAG}"
+
+      echo "Rolling back service ${SERVICE_NAME} to: ${ROLLBACK_IMAGE_URI}"
+YAML
+      } > "${SNIPPET}"
+
+      # Render dropdown options and splice into the snippet
+      OPTIONS=$$(printf '%s\n' "${TAGS}" | awk 'NF{gsub(/\"/,"\\\\\""); printf "          - label: \"%s\"\n            value: \"%s\"\n", $$0, $$0 }')
+      awk -v repl="${OPTIONS}" '
+        $$0=="__TAG_OPTIONS__" { print repl; next }
+        { print }
+      ' "${SNIPPET}" > "${SNIPPET}.new" && mv "${SNIPPET}.new" "${SNIPPET}"
+
+      buildkite-agent pipeline upload "${SNIPPET}"
 """
-
-    pipeline = {
-        "steps": [
-            {
-                "label": "Select Service to Roll Back",
-                "key": "rb_select_service",
-                "type": "input",
-                "fields": [
-                    {
-                        "select": "SERVICE_NAME",
-                        "key": "SERVICE_NAME",
-                        "required": True,
-                        "options": [{"label": s, "value": s} for s in services],
-                    }
-                ],
-            },
-            {
-                "label": "Persist service selection",
-                "key": "rb_persist_service",
-                "depends_on": "rb_select_service",
-                "command": persist_service_cmd,
-            },
-            {
-                "label": "Fetch recent ECR tags",
-                "key": "rb_fetch_and_prompt",
-                "depends_on": "rb_persist_service",
-                "command": fetch_and_prompt_cmd,
-            },
-        ]
-    }
-
-    _emit(pipeline)
+    )
 
 
 if __name__ == "__main__":
