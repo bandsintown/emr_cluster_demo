@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-"""Generate the rollback pipeline with a service dropdown from s3_mapping.json keys."""
-
 from __future__ import annotations
 
 import json
@@ -76,7 +73,7 @@ buildkite-agent meta-data set RB_ECR_REPOSITORY "${ECR_REPOSITORY}"
 
 {
   echo "steps:";
-  echo "  - label: \"⏪ Choose Rollback Tag\"";
+  echo "  - label: \"Choose Rollback Tag\"";
   echo "    key: \"rb_choose_tag\"";
   echo "    type: input";
   echo "    prompt: \"Pick the image tag to roll back to (most recent first).\"";
@@ -94,7 +91,7 @@ buildkite-agent meta-data set RB_ECR_REPOSITORY "${ECR_REPOSITORY}"
   done
 
   echo "";
-  echo "  - label: \"⏪ Execute rollback\"";
+  echo "  - label: \"Execute rollback\"";
   echo "    key: \"rb_execute\"";
   echo "    depends_on: \"rb_choose_tag\"";
   echo "    command: |";
@@ -116,7 +113,7 @@ buildkite-agent meta-data set RB_ECR_REPOSITORY "${ECR_REPOSITORY}"
     pipeline = {
         "steps": [
             {
-                "label": "⚙️ Select Service to Roll Back",
+                "label": "Select Service to Roll Back",
                 "key": "rb_select_service",
                 "type": "input",
                 "fields": [
@@ -129,13 +126,13 @@ buildkite-agent meta-data set RB_ECR_REPOSITORY "${ECR_REPOSITORY}"
                 ],
             },
             {
-                "label": ":memo: Persist service selection",
+                "label": "Persist service selection",
                 "key": "rb_persist_service",
                 "depends_on": "rb_select_service",
                 "command": persist_service_cmd,
             },
             {
-                "label": "🔎 Fetch recent ECR tags and prompt",
+                "label": "Fetch recent ECR tags",
                 "key": "rb_fetch_and_prompt",
                 "depends_on": "rb_persist_service",
                 "command": fetch_and_prompt_cmd,
@@ -143,8 +140,8 @@ buildkite-agent meta-data set RB_ECR_REPOSITORY "${ECR_REPOSITORY}"
         ]
     }
 
-    # Print ONLY YAML. Buildkite parser errors suggest comments may be rejected.
-    print(yaml.safe_dump(pipeline, sort_keys=False))
+    # Only YAML on stdout
+    print(yaml.safe_dump(pipeline, sort_keys=False, allow_unicode=False))
 
 
 if __name__ == "__main__":
