@@ -37,77 +37,50 @@ buildkite-agent meta-data set RB_SERVICE_NAME \"${SERVICE_NAME}\"\n"""
 
     fetch_and_prompt_cmd = r"""set -euo pipefail
 
-SERVICE_NAME="$$(buildkite-agent meta-data get RB_SERVICE_NAME)"
+# 1. Get the service name from the previous step's meta-data
+SERVICE_NAME=$(buildkite-agent meta-data get "SERVICE_NAME")
 AWS_ACCOUNT_ID="004095192903"
 AWS_REGION="us-east-1"
 ECR_REPOSITORY="emr_cluster"
 
-if [ -z "${SERVICE_NAME}" ]; then
-  echo "RB_SERVICE_NAME is required" >&2
-  exit 1
-fi
-
-if ! command -v aws >/dev/null 2>&1; then
-  if command -v apk >/dev/null 2>&1; then
-    apk add --no-cache aws-cli >/dev/null
-  else
-    echo "aws CLI not found on agent" >&2
-    exit 1
-  fi
-fi
-
-TAGS="$(python3 .buildkite/list_ecr_tags.py \
+# 2. Fetch tags
+TAGS=$(python3 .buildkite/list_ecr_tags.py \
   --region "${AWS_REGION}" \
   --repo "${ECR_REPOSITORY}" \
   --service "${SERVICE_NAME}" \
-  --limit 30)"
+  --limit 30)
 
 if [ -z "${TAGS}" ]; then
   echo "No tags found for service ${SERVICE_NAME}" >&2
   exit 1
 fi
 
-buildkite-agent meta-data set RB_AWS_ACCOUNT_ID "${AWS_ACCOUNT_ID}"
-buildkite-agent meta-data set RB_AWS_REGION "${AWS_REGION}"
-buildkite-agent meta-data set RB_ECR_REPOSITORY "${ECR_REPOSITORY}"
+# 3. Build the dynamic pipeline string
+# We use a heredoc for clarity to avoid quoting nightmares
+cat <<EOF | buildkite-agent pipeline upload
+steps:
+  - label: "Choose Rollback Tag"
+    key: "rb_choose_tag"
+    type: input
+    fields:
+      - select: "ROLLBACK_TAG"
+        key: "rollback_tag_selection"
+        required: true
+        options:
+$(printf '%s\n' "${TAGS}" | while read -r t; do
+    echo "          - label: \"${t}\""
+    echo "            value: \"${t}\""
+done)
 
-{
-  echo "steps:";
-  echo "  - label: \"Choose Rollback Tag\"";
-  echo "    key: \"rb_choose_tag\"";
-  echo "    type: input";
-  echo "    prompt: \"Pick the image tag to roll back to (most recent first).\"";
-  echo "    fields:";
-  echo "      - select: \"ROLLBACK_TAG\"";
-  echo "        key: \"ROLLBACK_TAG\"";
-  echo "        required: true";
-  echo "        options:";
-
-  printf '%s\n' "${TAGS}" | while IFS= read -r t; do
-    [ -z "${t}" ] && continue
-    esc=${t//\"/\\\"}
-    printf '          - label: "%s"\n' "${esc}";
-    printf '            value: "%s"\n' "${esc}";
-  done
-
-  echo "";
-  echo "  - label: \"Execute rollback\"";
-  echo "    key: \"rb_execute\"";
-  echo "    depends_on: \"rb_choose_tag\"";
-  echo "    command: |";
-  echo "      set -euo pipefail";
-  echo "";
-  echo "      SERVICE_NAME=\"$$(buildkite-agent meta-data get RB_SERVICE_NAME)\"";
-  echo "      AWS_ACCOUNT_ID=\"$$(buildkite-agent meta-data get RB_AWS_ACCOUNT_ID)\"";
-  echo "      AWS_REGION=\"$$(buildkite-agent meta-data get RB_AWS_REGION)\"";
-  echo "      ECR_REPOSITORY=\"$$(buildkite-agent meta-data get RB_ECR_REPOSITORY)\"";
-  echo "      ROLLBACK_TAG=\"${ROLLBACK_TAG}\"";
-  echo "";
-  echo "      ECR_URI=\"${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com\"";
-  echo "      ROLLBACK_IMAGE_URI=\"${ECR_URI}/${ECR_REPOSITORY}:${ROLLBACK_TAG}\"";
-  echo "";
-  echo "      echo \"Rolling back service ${SERVICE_NAME} to: ${ROLLBACK_IMAGE_URI}\"";
-} | buildkite-agent pipeline upload
+  - label: "Execute rollback"
+    command: |
+      # We use \$$ to escape the dollar sign so Buildkite doesn't 
+      # try to evaluate it during the upload phase.
+      SELECTED_TAG=\$(buildkite-agent meta-data get "rollback_tag_selection")
+      
+      echo "Rolling back ${SERVICE_NAME} to \${SELECTED_TAG}..."
+      # Add your deployment command here using \${SELECTED_TAG}
+EOF
 """
 
     pipeline = {
