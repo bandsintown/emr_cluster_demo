@@ -33,11 +33,10 @@ def main() -> None:
         for s in services
     )
 
-    # Keep the generated YAML minimal and avoid any banner/comments on stdout.
     print(
         """steps:
-  - label: \"Select Service to Roll Back\"
-    key: \"rb_select_service\"
+  - label: \"Select service\"
+    key: \"rb_service\"
     type: input
     fields:
       - select: \"SERVICE_NAME\"
@@ -48,24 +47,20 @@ def main() -> None:
         + service_options
         + """
 
-  - label: \"Persist service selection\"
-    key: \"rb_persist_service\"
-    depends_on: \"rb_select_service\"
-    command: |
-      set -euo pipefail
-      : \"${SERVICE_NAME:?SERVICE_NAME is required}\"
-      buildkite-agent meta-data set RB_SERVICE_NAME \"${SERVICE_NAME}\"
-
-  - label: \"Fetch recent ECR tags\"
-    key: \"rb_fetch_and_prompt\"
-    depends_on: \"rb_persist_service\"
+  - label: \"List recent image tags\"
+    key: \"rb_list_tags\"
+    depends_on: \"rb_service\"
     command: |
       set -euo pipefail
 
-      SERVICE_NAME=\"$$(buildkite-agent meta-data get RB_SERVICE_NAME)\"
-      AWS_ACCOUNT_ID=\"004095192903\"
+      SERVICE_NAME=\"${SERVICE_NAME:-}\"
       AWS_REGION=\"us-east-1\"
       ECR_REPOSITORY=\"emr_cluster\"
+
+      if [ -z \"${SERVICE_NAME}\" ]; then
+        echo \"SERVICE_NAME is required\" >&2
+        exit 1
+      fi
 
       if ! command -v aws >/dev/null 2>&1; then
         if command -v apk >/dev/null 2>&1; then
@@ -76,62 +71,12 @@ def main() -> None:
         fi
       fi
 
-      TAGS=\"$$(python3 .buildkite/list_ecr_tags.py \\
-        --region \"${AWS_REGION}\" \\
-        --repo \"${ECR_REPOSITORY}\" \\
-        --service \"${SERVICE_NAME}\" \\
-        --limit 30)\"\
-
-      if [ -z \"${TAGS}\" ]; then
-        echo \"No tags found for service ${SERVICE_NAME}\" >&2
-        exit 1
-      fi
-
-      buildkite-agent meta-data set RB_AWS_ACCOUNT_ID \"${AWS_ACCOUNT_ID}\"
-      buildkite-agent meta-data set RB_AWS_REGION \"${AWS_REGION}\"
-      buildkite-agent meta-data set RB_ECR_REPOSITORY \"${ECR_REPOSITORY}\"
-
-      SNIPPET=/tmp/rollback-snippet.yml
-      {
-        cat <<'YAML'
-      steps:
-        - label: "Choose Rollback Tag"
-          key: "rb_choose_tag"
-          type: input
-          prompt: "Pick the image tag to roll back to (most recent first)."
-          fields:
-            - select: "ROLLBACK_TAG"
-              key: "ROLLBACK_TAG"
-              required: true
-              options:
-      __TAG_OPTIONS__
-
-        - label: "Execute rollback"
-          key: "rb_execute"
-          depends_on: "rb_choose_tag"
-          command: |
-            set -euo pipefail
-
-            SERVICE_NAME="$$(buildkite-agent meta-data get RB_SERVICE_NAME)"
-            AWS_ACCOUNT_ID="$$(buildkite-agent meta-data get RB_AWS_ACCOUNT_ID)"
-            AWS_REGION="$$(buildkite-agent meta-data get RB_AWS_REGION)"
-            ECR_REPOSITORY="$$(buildkite-agent meta-data get RB_ECR_REPOSITORY)"
-            ROLLBACK_TAG="${ROLLBACK_TAG}"
-
-            ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-            ROLLBACK_IMAGE_URI="${ECR_URI}/${ECR_REPOSITORY}:${ROLLBACK_TAG}"
-
-            echo "Rolling back service ${SERVICE_NAME} to: ${ROLLBACK_IMAGE_URI}"
-      YAML
-      } > "${SNIPPET}"
-
-      OPTIONS=$$(printf '%s\n' "${TAGS}" | awk 'NF{gsub(/\"/,"\\\\\""); printf "              - label: \"%s\"\n                value: \"%s\"\n", $$0, $$0 }')
-      awk -v repl="${OPTIONS}" '
-        $$0=="      __TAG_OPTIONS__" { print repl; next }
-        { print }
-      ' "${SNIPPET}" > "${SNIPPET}.new" && mv "${SNIPPET}.new" "${SNIPPET}"
-
-      buildkite-agent pipeline upload "${SNIPPET}"
+      echo \"--- Recent tags for service: ${SERVICE_NAME} (repo: ${ECR_REPOSITORY}) ---\"
+      python3 .buildkite/list_ecr_tags.py \
+        --region \"${AWS_REGION}\" \
+        --repo \"${ECR_REPOSITORY}\" \
+        --service \"${SERVICE_NAME}\" \
+        --limit 30
 """
     )
 
