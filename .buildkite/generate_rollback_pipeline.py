@@ -37,27 +37,27 @@ buildkite-agent meta-data set RB_SERVICE_NAME \"${SERVICE_NAME}\"\n"""
 
     fetch_and_prompt_cmd = r"""set -euo pipefail
 
-# 1. Get the service name from the previous step's meta-data
+# 1. Get service name
 SERVICE_NAME=$(buildkite-agent meta-data get "SERVICE_NAME")
-AWS_ACCOUNT_ID="004095192903"
 AWS_REGION="us-east-1"
 ECR_REPOSITORY="emr_cluster"
 
-# 2. Fetch tags
-TAGS=$(python3 .buildkite/list_ecr_tags.py \
-  --region "${AWS_REGION}" \
-  --repo "${ECR_REPOSITORY}" \
-  --service "${SERVICE_NAME}" \
-  --limit 30)
+# 2. Get Tags and format them into YAML options immediately
+# We use perl or awk to safely format each line with correct indentation
+RAW_TAGS=$(python3 .buildkite/list_ecr_tags.py --region "${AWS_REGION}" --repo "${ECR_REPOSITORY}" --service "${SERVICE_NAME}" --limit 30)
 
-if [ -z "${TAGS}" ]; then
-  echo "No tags found for service ${SERVICE_NAME}" >&2
+if [ -z "${RAW_TAGS}" ]; then
+  echo "No tags found" >&2
   exit 1
 fi
 
-# 3. Build the dynamic pipeline string
-# We use a heredoc for clarity to avoid quoting nightmares
-cat <<EOF | buildkite-agent pipeline upload
+# Create the options block string
+YAML_OPTIONS=$(echo "${RAW_TAGS}" | awk '{ print "          - label: \"" $0 "\"\n            value: \"" $0 "\"" }')
+
+# 3. Upload the pipeline using a HEREDOC
+# Note the quoted "EOF" - this prevents the local shell from trying to 
+# expand variables like $SERVICE_NAME inside the heredoc.
+cat <<"EOF" | buildkite-agent pipeline upload
 steps:
   - label: "Choose Rollback Tag"
     key: "rb_choose_tag"
@@ -67,19 +67,14 @@ steps:
         key: "rollback_tag_selection"
         required: true
         options:
-$(printf '%s\n' "${TAGS}" | while read -r t; do
-    echo "          - label: \"${t}\""
-    echo "            value: \"${t}\""
-done)
+${YAML_OPTIONS}
 
   - label: "Execute rollback"
     command: |
-      # We use \$$ to escape the dollar sign so Buildkite doesn't 
-      # try to evaluate it during the upload phase.
-      SELECTED_TAG=\$(buildkite-agent meta-data get "rollback_tag_selection")
-      
-      echo "Rolling back ${SERVICE_NAME} to \${SELECTED_TAG}..."
-      # Add your deployment command here using \${SELECTED_TAG}
+      # These variables will be evaluated when this generated step actually runs
+      SELECTED_TAG=$(buildkite-agent meta-data get "rollback_tag_selection")
+      SERVICE=$(buildkite-agent meta-data get "SERVICE_NAME")
+      echo "Rolling back ${SERVICE} to tag: ${SELECTED_TAG}"
 EOF
 """
 
