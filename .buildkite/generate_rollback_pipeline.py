@@ -80,7 +80,7 @@ def main() -> None:
         --region \"${AWS_REGION}\" \\
         --repo \"${ECR_REPOSITORY}\" \\
         --service \"${SERVICE_NAME}\" \\
-        --limit 30)\"
+        --limit 30)\"\
 
       if [ -z \"${TAGS}\" ]; then
         echo \"No tags found for service ${SERVICE_NAME}\" >&2
@@ -94,41 +94,40 @@ def main() -> None:
       SNIPPET=/tmp/rollback-snippet.yml
       {
         cat <<'YAML'
-steps:
-  - label: "Choose Rollback Tag"
-    key: "rb_choose_tag"
-    type: input
-    prompt: "Pick the image tag to roll back to (most recent first)."
-    fields:
-      - select: "ROLLBACK_TAG"
-        key: "ROLLBACK_TAG"
-        required: true
-        options:
-__TAG_OPTIONS__
+      steps:
+        - label: "Choose Rollback Tag"
+          key: "rb_choose_tag"
+          type: input
+          prompt: "Pick the image tag to roll back to (most recent first)."
+          fields:
+            - select: "ROLLBACK_TAG"
+              key: "ROLLBACK_TAG"
+              required: true
+              options:
+      __TAG_OPTIONS__
 
-  - label: "Execute rollback"
-    key: "rb_execute"
-    depends_on: "rb_choose_tag"
-    command: |
-      set -euo pipefail
+        - label: "Execute rollback"
+          key: "rb_execute"
+          depends_on: "rb_choose_tag"
+          command: |
+            set -euo pipefail
 
-      SERVICE_NAME="$$(buildkite-agent meta-data get RB_SERVICE_NAME)"
-      AWS_ACCOUNT_ID="$$(buildkite-agent meta-data get RB_AWS_ACCOUNT_ID)"
-      AWS_REGION="$$(buildkite-agent meta-data get RB_AWS_REGION)"
-      ECR_REPOSITORY="$$(buildkite-agent meta-data get RB_ECR_REPOSITORY)"
-      ROLLBACK_TAG="${ROLLBACK_TAG}"
+            SERVICE_NAME="$$(buildkite-agent meta-data get RB_SERVICE_NAME)"
+            AWS_ACCOUNT_ID="$$(buildkite-agent meta-data get RB_AWS_ACCOUNT_ID)"
+            AWS_REGION="$$(buildkite-agent meta-data get RB_AWS_REGION)"
+            ECR_REPOSITORY="$$(buildkite-agent meta-data get RB_ECR_REPOSITORY)"
+            ROLLBACK_TAG="${ROLLBACK_TAG}"
 
-      ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-      ROLLBACK_IMAGE_URI="${ECR_URI}/${ECR_REPOSITORY}:${ROLLBACK_TAG}"
+            ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+            ROLLBACK_IMAGE_URI="${ECR_URI}/${ECR_REPOSITORY}:${ROLLBACK_TAG}"
 
-      echo "Rolling back service ${SERVICE_NAME} to: ${ROLLBACK_IMAGE_URI}"
-YAML
+            echo "Rolling back service ${SERVICE_NAME} to: ${ROLLBACK_IMAGE_URI}"
+      YAML
       } > "${SNIPPET}"
 
-      # Render dropdown options and splice into the snippet
-      OPTIONS=$$(printf '%s\n' "${TAGS}" | awk 'NF{gsub(/\"/,"\\\\\""); printf "          - label: \"%s\"\n            value: \"%s\"\n", $$0, $$0 }')
+      OPTIONS=$$(printf '%s\n' "${TAGS}" | awk 'NF{gsub(/\"/,"\\\\\""); printf "              - label: \"%s\"\n                value: \"%s\"\n", $$0, $$0 }')
       awk -v repl="${OPTIONS}" '
-        $$0=="__TAG_OPTIONS__" { print repl; next }
+        $$0=="      __TAG_OPTIONS__" { print repl; next }
         { print }
       ' "${SNIPPET}" > "${SNIPPET}.new" && mv "${SNIPPET}.new" "${SNIPPET}"
 
