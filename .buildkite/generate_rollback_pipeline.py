@@ -27,7 +27,6 @@ def _yaml_escape(s: str) -> str:
 
 def main() -> None:
     services = _load_service_names()
-
     default_service = services[0]
 
     service_options = "\n".join(
@@ -35,8 +34,7 @@ def main() -> None:
         for s in services
     )
 
-    print(
-        """steps:
+    yaml_text = f"""steps:
   - label: \"Select service\"
     key: \"rb_service\"
     type: input
@@ -44,11 +42,9 @@ def main() -> None:
       - select: \"SERVICE_NAME\"
         key: \"SERVICE_NAME\"
         required: true
-        default: \""" + _yaml_escape(default_service) + """\"
+        default: \"{_yaml_escape(default_service)}\"
         options:
-"""
-        + service_options
-        + """
+{service_options}
 
   - label: \"List recent image tags\"
     key: \"rb_list_tags\"
@@ -56,11 +52,11 @@ def main() -> None:
     command: |
       set -euo pipefail
 
-      SERVICE_NAME=\"${SERVICE_NAME:-}\"
+      SERVICE_NAME=\"${{SERVICE_NAME:-}}\"
       AWS_REGION=\"us-east-1\"
       ECR_REPOSITORY=\"emr_cluster\"
 
-      if [ -z \"${SERVICE_NAME}\" ]; then
+      if [ -z \"${{SERVICE_NAME}}\" ]; then
         echo \"SERVICE_NAME is required\" >&2
         exit 1
       fi
@@ -74,14 +70,15 @@ def main() -> None:
         fi
       fi
 
-      echo \"--- Recent tags for service: ${SERVICE_NAME} (repo: ${ECR_REPOSITORY}) ---\"
+      echo \"--- Recent tags for service: ${{SERVICE_NAME}} (repo: ${{ECR_REPOSITORY}}) ---\"
       python3 .buildkite/list_ecr_tags.py \
-        --region \"${AWS_REGION}\" \
-        --repo \"${ECR_REPOSITORY}\" \
-        --service \"${SERVICE_NAME}\" \
+        --region \"${{AWS_REGION}}\" \
+        --repo \"${{ECR_REPOSITORY}}\" \
+        --service \"${{SERVICE_NAME}}\" \
         --limit 30
 """
-    )
+
+    print(yaml_text)
 
 
 if __name__ == "__main__":
