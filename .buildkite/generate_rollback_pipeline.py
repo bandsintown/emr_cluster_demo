@@ -55,26 +55,14 @@ def main() -> None:
       SERVICE_NAME=\"${{SERVICE_NAME:-}}\"
       AWS_REGION=\"us-east-1\"
       ECR_REPOSITORY=\"emr_cluster\"
-
-      if [ -z \"${{SERVICE_NAME}}\" ]; then
-        echo \"SERVICE_NAME is required\" >&2
-        exit 1
-      fi
-
       if ! command -v aws >/dev/null 2>&1; then
-        if command -v apk >/dev/null 2>&1; then
-          apk add --no-cache aws-cli >/dev/null
-        else
-          echo \"aws CLI not found on agent\" >&2
-          exit 1
         fi
       fi
 
       echo \"--- Recent tags for service: ${{SERVICE_NAME}} (repo: ${{ECR_REPOSITORY}}) ---\"
-      python3 .buildkite/list_ecr_tags.py \
-        --region \"${{AWS_REGION}}\" \
-        --repo \"${{ECR_REPOSITORY}}\" \
-        --service \"${{SERVICE_NAME}}\" \
+      python3 .buildkite/list_ecr_tags.py \\
+        --region \"${{AWS_REGION}}\" \\
+        --repo \"${{ECR_REPOSITORY}}\" \\
         --limit 30
 """
 
