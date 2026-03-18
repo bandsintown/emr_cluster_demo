@@ -35,51 +35,57 @@ if [ -z \"${SERVICE_NAME:-}\" ]; then
 fi
 buildkite-agent meta-data set RB_SERVICE_NAME \"${SERVICE_NAME}\"\n"""
 
-    fetch_and_prompt_cmd = r"""set -euo pipefail
+    fetch_and_prompt_cmd =fetch_and_prompt_cmd = r"""set -euo pipefail
 
-    # 1. Get the selections
-    SERVICE_NAME=$(buildkite-agent meta-data get "SERVICE_NAME")
-    AWS_REGION="us-east-1"
-    ECR_REPOSITORY="emr_cluster"
+# 1. Get the service name from the FIRST input step (rb_select_service)
+# In Buildkite, the key in 'fields' becomes the meta-data key.
+SERVICE_NAME=$(buildkite-agent meta-data get "SERVICE_NAME")
 
-    # 2. Get the tags from your existing script
-    TAGS=$(python3 .buildkite/list_ecr_tags.py --region "${AWS_REGION}" --repo "${ECR_REPOSITORY}" --service "${SERVICE_NAME}" --limit 30)
+if [ -z "$SERVICE_NAME" ]; then
+  echo "Error: SERVICE_NAME meta-data is empty" >&2
+  exit 1
+fi
 
-    if [ -z "${TAGS}" ]; then
-      echo "No tags found for ${SERVICE_NAME}" >&2
-      exit 1
-    fi
+AWS_REGION="us-east-1"
+ECR_REPOSITORY="emr_cluster"
 
-    # 3. Use Python to generate the YAML safely. 
-    # This avoids all quoting/escaping/indentation issues in Bash.
-    python3 -c "
-    import yaml, sys
+# 2. Fetch tags - Ensure these variables are populated
+TAGS=$(python3 .buildkite/list_ecr_tags.py \
+  --region "${AWS_REGION}" \
+  --repo "${ECR_REPOSITORY}" \
+  --service "${SERVICE_NAME}" \
+  --limit 30)
 
-    tags = sys.stdin.read().splitlines()
-    service = '${SERVICE_NAME}'
+# 3. Use a simple Python one-liner to generate the next steps safely
+# We export variables to the env so the python -c can pick them up easily
+export SERVICE_NAME TAGS
+python3 -c "
+import yaml, os, sys
+tags = os.environ.get('TAGS', '').splitlines()
+service = os.environ.get('SERVICE_NAME')
 
-    pipeline = {
-        'steps': [
-            {
-                'label': 'Choose Rollback Tag',
-                'key': 'rb_choose_tag',
-                'type': 'input',
-                'fields': [{
-                    'select': 'ROLLBACK_TAG',
-                    'key': 'rollback_tag_selection',
-                    'required': True,
-                    'options': [{'label': t, 'value': t} for t in tags if t]
-                }]
-            },
-            {
-                'label': f'Execute rollback for {service}',
-                'command': 'TAG=\$(buildkite-agent meta-data get \"rollback_tag_selection\")\necho \"Rolling back to \$TAG\"'
-            }
-        ]
-    }
-    print(yaml.dump(pipeline))
-    " <<< "${TAGS}" | buildkite-agent pipeline upload
-    """
+new_pipeline = {
+    'steps': [
+        {
+            'label': 'Choose Rollback Tag',
+            'key': 'rb_choose_tag',
+            'type': 'input',
+            'fields': [{
+                'select': 'ROLLBACK_TAG',
+                'key': 'rollback_tag_selection',
+                'required': True,
+                'options': [{'label': t, 'value': t} for t in tags if t]
+            }]
+        },
+        {
+            'label': f'Execute rollback for {service}',
+            'command': f'TAG=\\$(buildkite-agent meta-data get \"rollback_tag_selection\")\\necho \"Rolling back {service} to \\$TAG\"'
+        }
+    ]
+}
+print(yaml.dump(new_pipeline))
+" | buildkite-agent pipeline upload
+"""
 
     pipeline = {
         "steps": [
