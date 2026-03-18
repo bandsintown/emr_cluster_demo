@@ -18,7 +18,10 @@ steps:
     command: |
       set -euo pipefail
 
-      SERVICE_NAME="${SERVICE_NAME:-}"
+      # Buildkite input-step values are not reliably exported as env vars in this pipeline.
+      # Read the selected value from meta-data instead.
+      SERVICE_NAME="$$(buildkite-agent meta-data get "SERVICE_NAME")"
+
       AWS_ACCOUNT_ID="004095192903"
       AWS_REGION="us-east-1"
       ECR_REPOSITORY="emr_cluster"
@@ -67,8 +70,10 @@ steps:
 
         printf '%s\n' "${TAGS}" | while IFS= read -r t; do
           [ -z "${t}" ] && continue
-          printf '          - label: "%s"\n' "${t}";
-          printf '            value: "%s"\n' "${t}";
+          # Escape embedded double-quotes for YAML safety
+          esc=${t//\"/\\\"}
+          printf '          - label: "%s"\n' "${esc}";
+          printf '            value: "%s"\n' "${esc}";
         done
 
         echo "";

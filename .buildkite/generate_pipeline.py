@@ -124,7 +124,7 @@ def main() -> None:
                 "depends_on": "ask_rollback",
                 "command": (
                     "if [ \"$$(buildkite-agent meta-data get 'do-rollback')\" = 'yes' ]; then\n"
-                    "  buildkite-agent pipeline upload .buildkite/rollback-pipeline.yml\n"
+                    "  python3 .buildkite/generate_rollback_pipeline.py | buildkite-agent pipeline upload\n"
                     "fi"
                 ),
             },
