@@ -1,69 +1,54 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-MAPPING_PATH = ROOT / ".buildkite" / "config" / "s3_mapping.json"
-
-
-def _load_service_names() -> list[str]:
-    raw = MAPPING_PATH.read_text(encoding="utf-8")
-    raw = "\n".join(
-        line for line in raw.splitlines() if not line.lstrip().startswith("//")
-    )
-    data = json.loads(raw)
-    if not isinstance(data, dict):
-        raise SystemExit("s3_mapping.json must be a JSON object")
-    names = sorted(str(k) for k in data.keys())
-    if not names:
-        raise SystemExit("No services found in s3_mapping.json")
-    return names
-
-
-def _yaml_escape(s: str) -> str:
-    return s.replace('"', '\\"')
-
 
 def main() -> None:
-    services = _load_service_names()
-    default_service = services[0]
-
-    service_options = "\n".join(
-        f"          - label: \"{_yaml_escape(s)}\"\n            value: \"{_yaml_escape(s)}\""
-        for s in services
-    )
-
-    yaml_text = f"""steps:
-  - label: \"Select service\"
-    key: \"rb_service\"
-    type: input
-    fields:
-      - select: \"SERVICE_NAME\"
-        key: \"SERVICE_NAME\"
-        required: true
-        default: \"{_yaml_escape(default_service)}\"
-        options:
-{service_options}
-
-  - label: \"List recent image tags\"
-    key: \"rb_list_tags\"
-    depends_on: \"rb_service\"
+    # SERVICE_NAME is expected to come from a previous pipeline step.
+    # No interactive selection of service or tag.
+    print(
+        """steps:
+  - label: "Rollback: push previous tag to S3"
+    key: "rb_prev_tag_and_s3"
     command: |
       set -euo pipefail
 
-      SERVICE_NAME=\"${{SERVICE_NAME:-}}\"
-      AWS_REGION=\"us-east-1\"
-      ECR_REPOSITORY=\"emr_cluster\"
+      SERVICE_NAME="$$(buildkite-agent meta-data get SERVICE_NAME)"
+      AWS_REGION="us-east-1"
+      ECR_REPOSITORY="emr_cluster"
 
-      echo \"--- Recent tags for service: ${{SERVICE_NAME}} (repo: ${{ECR_REPOSITORY}}) ---\"
-      python3 .buildkite/list_ecr_tags.py \\
-        --region \"${{AWS_REGION}}\" \\
-        --repo \"${{ECR_REPOSITORY}}\" \\
-        --limit 30
+      if [ -z "${SERVICE_NAME}" ]; then
+        echo "SERVICE_NAME meta-data is required" >&2
+        exit 1
+      fi
+
+      if ! command -v aws >/dev/null 2>&1; then
+        if command -v apk >/dev/null 2>&1; then
+          apk add --no-cache aws-cli >/dev/null
+        else
+          echo "aws CLI not found on agent" >&2
+          exit 1
+        fi
+      fi
+
+      TAGS=$(python3 .buildkite/list_ecr_tags.py \
+        --region "${AWS_REGION}" \
+        --repo "${ECR_REPOSITORY}" \
+        --service "${SERVICE_NAME}" \
+        --limit 10)
+
+      PREV_TAG=$(printf '%s\n' "${TAGS}" | sed -n '2p')
+      if [ -z "${PREV_TAG}" ]; then
+        echo "Not enough tags found for service ${SERVICE_NAME} to choose previous tag" >&2
+        exit 1
+      fi
+
+      echo "Using previous tag: ${PREV_TAG}"
+
+      # s3-push.yml reads BUILD_TAG to set IMAGE_TAG in the uploader container
+      buildkite-agent meta-data set BUILD_TAG "${PREV_TAG}"
+
+      buildkite-agent pipeline upload .buildkite/s3-push.yml
 """
-
-    print(yaml_text)
+    )
 
 
 if __name__ == "__main__":
