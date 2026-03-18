@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the rollback pipeline with a service dropdown from s3_mapping.json keys.
-
-Buildkite pipeline YAML is static, so we generate it at runtime (same approach
-as generate_pipeline.py).
-
-This generator produces a rollback pipeline that:
-1) asks user to select a service (dropdown sourced from s3_mapping.json keys)
-2) fetches recent ECR tags for that service
-3) uploads a second, generated pipeline snippet containing a real dropdown of tags
-4) executes rollback (currently prints the rollback image URI)
-
-Notes:
-- The tag dropdown cannot be populated from a previous step's output in a single
-  static YAML file. That's why step (2) uploads a snippet.
-"""
+"""Generate the rollback pipeline with a service dropdown from s3_mapping.json keys."""
 
 from __future__ import annotations
 
@@ -32,9 +18,7 @@ MAPPING_PATH = ROOT / ".buildkite" / "config" / "s3_mapping.json"
 
 def _load_mapping_keys() -> list[str]:
     raw = MAPPING_PATH.read_text(encoding="utf-8")
-    raw = "\n".join(
-        line for line in raw.splitlines() if not line.lstrip().startswith("//")
-    )
+    raw = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("//"))
     data = json.loads(raw)
     if not isinstance(data, dict):
         raise SystemExit("s3_mapping.json must be a JSON object")
@@ -47,15 +31,22 @@ def _load_mapping_keys() -> list[str]:
 def main() -> None:
     services = _load_mapping_keys()
 
+    persist_service_cmd = r"""set -euo pipefail
+if [ -z \"${SERVICE_NAME:-}\" ]; then
+  echo \"SERVICE_NAME is required\" >&2
+  exit 1
+fi
+buildkite-agent meta-data set RB_SERVICE_NAME \"${SERVICE_NAME}\"\n"""
+
     fetch_and_prompt_cmd = r"""set -euo pipefail
 
-SERVICE_NAME="${SERVICE_NAME:-}"
+SERVICE_NAME="$$(buildkite-agent meta-data get RB_SERVICE_NAME)"
 AWS_ACCOUNT_ID="004095192903"
 AWS_REGION="us-east-1"
 ECR_REPOSITORY="emr_cluster"
 
 if [ -z "${SERVICE_NAME}" ]; then
-  echo "SERVICE_NAME is required" >&2
+  echo "RB_SERVICE_NAME is required" >&2
   exit 1
 fi
 
@@ -79,10 +70,9 @@ if [ -z "${TAGS}" ]; then
   exit 1
 fi
 
-buildkite-agent meta-data set "RB_SERVICE_NAME" "${SERVICE_NAME}"
-buildkite-agent meta-data set "RB_AWS_ACCOUNT_ID" "${AWS_ACCOUNT_ID}"
-buildkite-agent meta-data set "RB_AWS_REGION" "${AWS_REGION}"
-buildkite-agent meta-data set "RB_ECR_REPOSITORY" "${ECR_REPOSITORY}"
+buildkite-agent meta-data set RB_AWS_ACCOUNT_ID "${AWS_ACCOUNT_ID}"
+buildkite-agent meta-data set RB_AWS_REGION "${AWS_REGION}"
+buildkite-agent meta-data set RB_ECR_REPOSITORY "${ECR_REPOSITORY}"
 
 {
   echo "steps:";
@@ -120,7 +110,6 @@ buildkite-agent meta-data set "RB_ECR_REPOSITORY" "${ECR_REPOSITORY}"
   echo "      ROLLBACK_IMAGE_URI=\"${ECR_URI}/${ECR_REPOSITORY}:${ROLLBACK_TAG}\"";
   echo "";
   echo "      echo \"Rolling back service ${SERVICE_NAME} to: ${ROLLBACK_IMAGE_URI}\"";
-  echo "      echo \"TODO: add deployment logic here\"";
 } | buildkite-agent pipeline upload
 """
 
@@ -140,18 +129,23 @@ buildkite-agent meta-data set "RB_ECR_REPOSITORY" "${ECR_REPOSITORY}"
                 ],
             },
             {
+                "label": ":memo: Persist service selection",
+                "key": "rb_persist_service",
+                "depends_on": "rb_select_service",
+                "command": persist_service_cmd,
+            },
+            {
                 "label": "🔎 Fetch recent ECR tags and prompt",
                 "key": "rb_fetch_and_prompt",
-                "depends_on": "rb_select_service",
+                "depends_on": "rb_persist_service",
                 "command": fetch_and_prompt_cmd,
             },
         ]
     }
 
-    print("# GENERATED FILE - DO NOT EDIT")
+    # Print ONLY YAML. Buildkite parser errors suggest comments may be rejected.
     print(yaml.safe_dump(pipeline, sort_keys=False))
 
 
 if __name__ == "__main__":
     main()
-
