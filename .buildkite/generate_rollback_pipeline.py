@@ -53,7 +53,7 @@ def main() -> None:
     command: |
       set -euo pipefail
 
-      SERVICE_NAME=\"$$(buildkite-agent meta-data get 'SERVICE_NAME')\"
+      SERVICE_NAME="$(buildkite-agent meta-data get 'SERVICE_NAME')"
       AWS_REGION=\"us-east-1\"
       ECR_REPOSITORY=\"emr_cluster\"
 
