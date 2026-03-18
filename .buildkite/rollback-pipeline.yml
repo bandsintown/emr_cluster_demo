@@ -18,10 +18,15 @@ steps:
     command: |
       set -euo pipefail
 
-      SERVICE_NAME="${SERVICE_NAME}"
+      SERVICE_NAME="${SERVICE_NAME:-}"
       AWS_ACCOUNT_ID="004095192903"
       AWS_REGION="us-east-1"
       ECR_REPOSITORY="emr_cluster"
+
+      if [ -z "${SERVICE_NAME}" ]; then
+        echo "SERVICE_NAME is required" >&2
+        exit 1
+      fi
 
       if ! command -v aws >/dev/null 2>&1; then
         if command -v apk >/dev/null 2>&1; then
