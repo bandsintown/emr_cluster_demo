@@ -37,46 +37,49 @@ buildkite-agent meta-data set RB_SERVICE_NAME \"${SERVICE_NAME}\"\n"""
 
     fetch_and_prompt_cmd = r"""set -euo pipefail
 
-# 1. Get service name
-SERVICE_NAME=$(buildkite-agent meta-data get "SERVICE_NAME")
-AWS_REGION="us-east-1"
-ECR_REPOSITORY="emr_cluster"
+    # 1. Get the selections
+    SERVICE_NAME=$(buildkite-agent meta-data get "SERVICE_NAME")
+    AWS_REGION="us-east-1"
+    ECR_REPOSITORY="emr_cluster"
 
-# 2. Get Tags and format them into YAML options immediately
-# We use perl or awk to safely format each line with correct indentation
-RAW_TAGS=$(python3 .buildkite/list_ecr_tags.py --region "${AWS_REGION}" --repo "${ECR_REPOSITORY}" --service "${SERVICE_NAME}" --limit 30)
+    # 2. Get the tags from your existing script
+    TAGS=$(python3 .buildkite/list_ecr_tags.py --region "${AWS_REGION}" --repo "${ECR_REPOSITORY}" --service "${SERVICE_NAME}" --limit 30)
 
-if [ -z "${RAW_TAGS}" ]; then
-  echo "No tags found" >&2
-  exit 1
-fi
+    if [ -z "${TAGS}" ]; then
+      echo "No tags found for ${SERVICE_NAME}" >&2
+      exit 1
+    fi
 
-# Create the options block string
-YAML_OPTIONS=$(echo "${RAW_TAGS}" | awk '{ print "          - label: \"" $0 "\"\n            value: \"" $0 "\"" }')
+    # 3. Use Python to generate the YAML safely. 
+    # This avoids all quoting/escaping/indentation issues in Bash.
+    python3 -c "
+    import yaml, sys
 
-# 3. Upload the pipeline using a HEREDOC
-# Note the quoted "EOF" - this prevents the local shell from trying to 
-# expand variables like $SERVICE_NAME inside the heredoc.
-cat <<"EOF" | buildkite-agent pipeline upload
-steps:
-  - label: "Choose Rollback Tag"
-    key: "rb_choose_tag"
-    type: input
-    fields:
-      - select: "ROLLBACK_TAG"
-        key: "rollback_tag_selection"
-        required: true
-        options:
-${YAML_OPTIONS}
+    tags = sys.stdin.read().splitlines()
+    service = '${SERVICE_NAME}'
 
-  - label: "Execute rollback"
-    command: |
-      # These variables will be evaluated when this generated step actually runs
-      SELECTED_TAG=$(buildkite-agent meta-data get "rollback_tag_selection")
-      SERVICE=$(buildkite-agent meta-data get "SERVICE_NAME")
-      echo "Rolling back ${SERVICE} to tag: ${SELECTED_TAG}"
-EOF
-"""
+    pipeline = {
+        'steps': [
+            {
+                'label': 'Choose Rollback Tag',
+                'key': 'rb_choose_tag',
+                'type': 'input',
+                'fields': [{
+                    'select': 'ROLLBACK_TAG',
+                    'key': 'rollback_tag_selection',
+                    'required': True,
+                    'options': [{'label': t, 'value': t} for t in tags if t]
+                }]
+            },
+            {
+                'label': f'Execute rollback for {service}',
+                'command': 'TAG=\$(buildkite-agent meta-data get \"rollback_tag_selection\")\necho \"Rolling back to \$TAG\"'
+            }
+        ]
+    }
+    print(yaml.dump(pipeline))
+    " <<< "${TAGS}" | buildkite-agent pipeline upload
+    """
 
     pipeline = {
         "steps": [
