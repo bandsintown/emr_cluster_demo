@@ -55,9 +55,6 @@ def main() -> None:
       SERVICE_NAME=\"${{SERVICE_NAME:-}}\"
       AWS_REGION=\"us-east-1\"
       ECR_REPOSITORY=\"emr_cluster\"
-      if ! command -v aws >/dev/null 2>&1; then
-        fi
-      fi
 
       echo \"--- Recent tags for service: ${{SERVICE_NAME}} (repo: ${{ECR_REPOSITORY}}) ---\"
       python3 .buildkite/list_ecr_tags.py \\
