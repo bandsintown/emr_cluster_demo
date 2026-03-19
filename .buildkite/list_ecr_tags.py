@@ -52,6 +52,7 @@ def main() -> None:
         if not isinstance(tags, list):
             continue
         for t in tags:
+            print(t)
             if not isinstance(t, str):
                 continue
             if args.service and not t.endswith(f"_{args.service}"):
