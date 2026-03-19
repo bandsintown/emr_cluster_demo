@@ -14,7 +14,7 @@ if [ -z "$${SERVICE_NAME}" ]; then
   exit 1
 fi
 
-echo "--- Fetching tags for ${SERVICE_NAME}..."
+echo "--- Fetching tags for $${SERVICE_NAME}..."
 
 # 2. Get the 2 most recent tags (0 = current, 1 = previous)
 # list_ecr_tags.py outputs tags one per line, newest first
