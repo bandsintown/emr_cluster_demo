@@ -104,7 +104,7 @@ def main() -> None:
             {
                 "block": "⏪ Roll back to a previous image?",
                 "key": "ask_rollback",
-                "depends_on": "setup_pipeline",
+                # "depends_on": "setup_pipeline",
                 "fields": [
                     {
                         "select": "Rollback",
