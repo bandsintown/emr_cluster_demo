@@ -9,7 +9,7 @@ SERVICE_NAME="DailyArtistMetrics"
 AWS_REGION="us-east-1"
 ECR_REPOSITORY="emr_cluster"
 
-if [ -z "${SERVICE_NAME}" ]; then
+if [ -z "$${SERVICE_NAME}" ]; then
   echo "Error: SERVICE_NAME meta-data is required" >&2
   exit 1
 fi
@@ -21,7 +21,7 @@ echo "--- Fetching tags for ${SERVICE_NAME}..."
 TAGS_RAW="$(python3 .buildkite/list_ecr_tags.py \
   --region "${AWS_REGION}" \
   --repo "${ECR_REPOSITORY}" \
-  --service "${SERVICE_NAME}" \
+  --service "$${SERVICE_NAME}" \
   --limit 2)"
 
 CURRENT_TAG="$(printf '%s\n' "${TAGS_RAW}" | sed -n '1p')"
