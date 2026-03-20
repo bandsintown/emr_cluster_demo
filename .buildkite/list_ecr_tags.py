@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
+"""List recent ECR image tags for a repo, optionally filtered by service suffix.
+
+Prints tags one per line, newest first.
+
+Compatibility: Python 3.7+
+"""
+
 import argparse
 import json
 import os
 import subprocess
-from typing import List, Tuple  # Added missing import
+from typing import List, Tuple
 
 
-def sh(cmd: list[str]) -> str:
+def sh(cmd: List[str]) -> str:
     p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if p.returncode != 0:
-        # Use strip() to ensure clean error messages
         raise SystemExit(p.stderr.strip() or f"Command failed: {' '.join(cmd)}")
     return p.stdout
 
@@ -22,14 +28,21 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=30)
     args = ap.parse_args()
 
-    # Changed hardcoded 'emr_cluster' to args.repo
-    out = sh([
-        "aws", "ecr", "describe-images",
-        "--region", args.region,
-        "--repository-name", args.repo,
-        "--query", "imageDetails[*].{pushedAt:imagePushedAt,tags:imageTags}",
-        "--output", "json",
-    ])
+    out = sh(
+        [
+            "aws",
+            "ecr",
+            "describe-images",
+            "--region",
+            args.region,
+            "--repository-name",
+            args.repo,
+            "--query",
+            "imageDetails[*].{pushedAt:imagePushedAt,tags:imageTags}",
+            "--output",
+            "json",
+        ]
+    )
 
     items = json.loads(out)
     rows: List[Tuple[str, str]] = []
@@ -44,19 +57,15 @@ def main() -> None:
         for t in tags:
             if not isinstance(t, str):
                 continue
-
-            # Match the suffix logic
             if args.service and not t.endswith(f"_{args.service}"):
                 continue
-
             rows.append((pushed, t))
 
-    # Sort by timestamp (pushed) descending
     rows.sort(key=lambda x: x[0], reverse=True)
 
-    # Print unique tags only (to handle cases where limit is applied)
-    for _, tag in rows[:args.limit]:
+    for _, tag in rows[: args.limit]:
         print(tag)
 
 
-main()
+if __name__ == "__main__":
+    main()
