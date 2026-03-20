@@ -32,12 +32,12 @@ TAGS_RAW="$(python3 .buildkite/list_ecr_tags.py \
 #   exit 1
 # fi
 
-echo "--- Recent tags for ${SERVICE_NAME} (repo=${ECR_REPOSITORY}, region=${AWS_REGION}) ---"
-python3 .buildkite/list_ecr_tags.py \
-  --region "${AWS_REGION}" \
-  --repo "${ECR_REPOSITORY}" \
-  --service "${SERVICE_NAME}" \
-  --limit 30
+# echo "--- Recent tags for ${SERVICE_NAME} (repo=${ECR_REPOSITORY}, region=${AWS_REGION}) ---"
+# python3 .buildkite/list_ecr_tags.py \
+#   --region "${AWS_REGION}" \
+#   --repo "${ECR_REPOSITORY}" \
+#   --service "${SERVICE_NAME}" \
+#   --limit 30
 """
 
     print(
