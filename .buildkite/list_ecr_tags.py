@@ -66,8 +66,6 @@ def main() -> None:
         for t in tags:
             if not isinstance(t, str):
                 continue
-            if args.service and not t.endswith(f"_{args.service}"):
-                continue
             rows.append((pushed, t))
 
     rows.sort(key=lambda x: x[0], reverse=True)
