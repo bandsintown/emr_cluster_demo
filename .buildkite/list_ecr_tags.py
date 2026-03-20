@@ -42,7 +42,7 @@ def main() -> None:
 
     items = json.loads(out)
     rows: List[Tuple[str, str]] = []
-
+    args.all_tags = True
     for item in items:
         pushed = item.get("pushedAt") or ""
         tags = item.get("tags") or []
