@@ -1,75 +1,56 @@
 #!/usr/bin/env python3
-import argparse
-import json
-import os
-import subprocess
-from typing import List, Tuple
+import argparse, json, os, subprocess
 
 
-def sh(cmd: List[str]) -> str:
+def sh(cmd):
     p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if p.returncode != 0:
-        raise SystemExit(p.stderr.strip() or f"Command failed: {' '.join(cmd)}")
+        print(f"AWS ERROR: {p.stderr}")
+        return None
     return p.stdout
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--region", default=os.getenv("AWS_REGION", "us-east-1"))
-    ap.add_argument("--repo", required=True, help="ECR repository name")
-    # NEW: Added registry-id for cross-account support
-    ap.add_argument("--registry-id", required=False, help="AWS Account ID for the ECR registry")
-    ap.add_argument("--service", required=False, help="Service name suffix filter")
-    ap.add_argument("--all-tags", action="store_true", help="Print all tags")
-    ap.add_argument("--limit", type=int, default=30)
-    args = ap.parse_args()
-    args.registry_id = '004095192903'
+def main():
+    # Use these specific values to match your environment
+    REGISTRY_ID = "004095192903"
+    REPO_NAME = "emr_cluster"  # CHECK FOR TYPOS HERE (cluser vs cluster)
+    REGION = "us-east-1"  # DOUBLE CHECK REGION
 
-    # Build the AWS CLI command dynamically
     cmd = [
         "aws", "ecr", "describe-images",
-        "--region", args.region,
-        "--repository-name", args.repo,
+        "--region", REGION,
+        "--registry-id", REGISTRY_ID,
+        "--repository-name", REPO_NAME,
         "--query", "imageDetails[*].{pushedAt:imagePushedAt,tags:imageTags}",
-        "--output", "json",
+        "--output", "json"
     ]
 
-    # If a different account ID is provided, add it to the command
-    if args.registry_id:
-        cmd.extend(["--registry-id", args.registry_id])
+    print(f"--- Checking Account {REGISTRY_ID} in {REGION} for repo: {REPO_NAME} ---")
 
-    out = sh(
-        [
-            "aws",
-            "ecr",
-            "describe-images",
-            "--region",
-            args.region,
-            "--registry-id",
-            args.registry_id,
-            "--repository-name",
-            "emr_cluster",
-            "--query",
-            "imageDetails[*].{pushedAt:imagePushedAt,tags:imageTags}",
-            "--output",
-            "json",
-        ]
-    )
+    raw_output = sh(cmd)
+    if not raw_output: return
 
-    items = json.loads(out)
-    rows: list[tuple[str, str]] = []
+    items = json.loads(raw_output)
+    print(f"Found {len(items)} total image objects in ECR.")
+
+    rows = []
     for item in items:
-        pushed = item.get("pushedAt") or ""
+        pushed = str(item.get("pushedAt") or "Unknown Date")
         tags = item.get("tags") or []
-        if not isinstance(tags, list):
+
+        if not tags:
+            # This is a common reason for "nothing" appearing
+            print(f"Skipping untagged image pushed at {pushed}")
             continue
+
         for t in tags:
-            # if not isinstance(t, str):
-            #     continue
+            print(f"Matched Tag: {t} (Pushed: {pushed})")
             rows.append((pushed, t))
 
+    # Sort and print
     rows.sort(key=lambda x: x[0], reverse=True)
-    for _, tag in rows[: args.limit]:
+    print("\n--- TOP 10 RECENT TAGS ---")
+    for _, tag in rows[:10]:
         print(tag)
 
 
