@@ -38,26 +38,39 @@ def main() -> None:
     if args.registry_id:
         cmd.extend(["--registry-id", args.registry_id])
 
-    out = sh(cmd)
+    out = sh(
+        [
+            "aws",
+            "ecr",
+            "describe-images",
+            "--region",
+            args.region,
+            "--registry-id",
+            args.registry_id,
+            "--repository-name",
+            "emr_cluster",
+            "--query",
+            "imageDetails[*].{pushedAt:imagePushedAt,tags:imageTags}",
+            "--output",
+            "json",
+        ]
+    )
 
     items = json.loads(out)
-    rows: List[Tuple[str, str]] = []
-    args.all_tags = True
+    rows: list[tuple[str, str]] = []
     for item in items:
         pushed = item.get("pushedAt") or ""
         tags = item.get("tags") or []
-        print(f"{pushed}:{tags}")
-        if not isinstance(tags, list): continue
-
+        if not isinstance(tags, list):
+            continue
         for t in tags:
-            # Logic fix: Only filter if not --all-tags and service is provided
-            if not args.all_tags and args.service:
-                if not t.endswith(f"_{args.service}"):
-                    continue
+            if not isinstance(t, str):
+                continue
+            if args.service and not t.endswith(f"_{args.service}"):
+                continue
             rows.append((pushed, t))
 
     rows.sort(key=lambda x: x[0], reverse=True)
-
     for _, tag in rows[: args.limit]:
         print(tag)
 
