@@ -64,8 +64,8 @@ def main() -> None:
         if not isinstance(tags, list):
             continue
         for t in tags:
-            if not isinstance(t, str):
-                continue
+            # if not isinstance(t, str):
+            #     continue
             rows.append((pushed, t))
 
     rows.sort(key=lambda x: x[0], reverse=True)
