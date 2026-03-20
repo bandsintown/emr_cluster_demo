@@ -23,7 +23,7 @@ def main() -> None:
     ap.add_argument("--all-tags", action="store_true", help="Print all tags")
     ap.add_argument("--limit", type=int, default=30)
     args = ap.parse_args()
-    args.registry_id = '123456789012'
+    args.registry_id = '004095192903'
 
     # Build the AWS CLI command dynamically
     cmd = [
