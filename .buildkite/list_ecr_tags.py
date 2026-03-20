@@ -10,6 +10,7 @@ import argparse
 import json
 import os
 import subprocess
+from math import trunc
 from typing import List, Tuple
 
 
@@ -25,6 +26,11 @@ def main() -> None:
     ap.add_argument("--region", default=os.getenv("AWS_REGION", "us-east-1"))
     ap.add_argument("--repo", required=True, help="ECR repository name")
     ap.add_argument("--service", required=False, help="Service name suffix filter")
+    ap.add_argument(
+        "--all-tags",
+        action="store_true",
+        help="Print all tags in the repo (ignores --service filtering)",
+    )
     ap.add_argument("--limit", type=int, default=30)
     args = ap.parse_args()
 
@@ -46,7 +52,7 @@ def main() -> None:
 
     items = json.loads(out)
     rows: List[Tuple[str, str]] = []
-
+    args.all_tags = True
     for item in items:
         pushed = item.get("pushedAt") or ""
         tags = item.get("tags") or []
@@ -57,7 +63,7 @@ def main() -> None:
         for t in tags:
             if not isinstance(t, str):
                 continue
-            if args.service and not t.endswith(f"_{args.service}"):
+            if (not args.all_tags) and args.service and not t.endswith(f"_{args.service}"):
                 continue
             rows.append((pushed, t))
 
