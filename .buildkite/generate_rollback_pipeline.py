@@ -18,20 +18,11 @@ echo "--- Fetching tags for $${SERVICE_NAME}..."
 
 # 2. Get the 2 most recent tags (0 = current, 1 = previous)
 # list_ecr_tags.py outputs tags one per line, newest first
-TAGS_RAW="$(python3 .buildkite/list_ecr_tags.py \
-  --region "$${AWS_REGION}" \
-  --repo "$${ECR_REPOSITORY}" \
-  --service "$${SERVICE_NAME}" \
-  --limit 2)"
-# ADD THESE LINES TO DEBUG
-echo "Tags found:"
-if [ -z "${TAGS_RAW}" ]; then
-  echo "(None)"
-  echo "Error: Could not find any tags for ${SERVICE_NAME} in ${ECR_REPOSITORY}." >&2
-  exit 1
-else
-  echo "${TAGS_RAW}"
-fi
+echo \"--- Recent tags for service: $${SERVICE_NAME} (repo: $${ECR_REPOSITORY}) ---\"
+      python3 .buildkite/list_ecr_tags.py \\
+        --region \"${{AWS_REGION}}\" \\
+        --repo \"${{ECR_REPOSITORY}}\" \\
+        --limit 30
 
 # CURRENT_TAG="$(printf '%s\n' "${TAGS_RAW}" | sed -n '1p')"
 # PREVIOUS_TAG="$(printf '%s\n' "${TAGS_RAW}" | sed -n '2p')"
