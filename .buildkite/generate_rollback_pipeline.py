@@ -23,6 +23,15 @@ TAGS_RAW="$(python3 .buildkite/list_ecr_tags.py \
   --repo "$${ECR_REPOSITORY}" \
   --service "$${SERVICE_NAME}" \
   --limit 2)"
+# ADD THESE LINES TO DEBUG
+echo "Tags found:"
+if [ -z "${TAGS_RAW}" ]; then
+  echo "(None)"
+  echo "Error: Could not find any tags for ${SERVICE_NAME} in ${ECR_REPOSITORY}." >&2
+  exit 1
+else
+  echo "${TAGS_RAW}"
+fi
 
 # CURRENT_TAG="$(printf '%s\n' "${TAGS_RAW}" | sed -n '1p')"
 # PREVIOUS_TAG="$(printf '%s\n' "${TAGS_RAW}" | sed -n '2p')"
