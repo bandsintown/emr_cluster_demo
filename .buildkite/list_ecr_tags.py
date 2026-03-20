@@ -1,16 +1,8 @@
 #!/usr/bin/env python3
-"""List recent ECR image tags for a repo, optionally filtered by service suffix.
-
-Prints tags one per line, newest first.
-
-Compatibility: Python 3.7+
-"""
-
 import argparse
 import json
 import os
 import subprocess
-from math import trunc
 from typing import List, Tuple
 
 
@@ -25,46 +17,42 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--region", default=os.getenv("AWS_REGION", "us-east-1"))
     ap.add_argument("--repo", required=True, help="ECR repository name")
+    # NEW: Added registry-id for cross-account support
+    ap.add_argument("--registry-id", required=False, help="AWS Account ID for the ECR registry")
     ap.add_argument("--service", required=False, help="Service name suffix filter")
-    ap.add_argument(
-        "--all-tags",
-        action="store_true",
-        help="Print all tags in the repo (ignores --service filtering)",
-    )
+    ap.add_argument("--all-tags", action="store_true", help="Print all tags")
     ap.add_argument("--limit", type=int, default=30)
     args = ap.parse_args()
+    args.registry_id = '123456789012'
 
-    out = sh(
-        [
-            "aws",
-            "ecr",
-            "describe-images",
-            "--region",
-            args.region,
-            "--repository-name",
-            args.repo,
-            "--query",
-            "imageDetails[*].{pushedAt:imagePushedAt,tags:imageTags}",
-            "--output",
-            "json",
-        ]
-    )
+    # Build the AWS CLI command dynamically
+    cmd = [
+        "aws", "ecr", "describe-images",
+        "--region", args.region,
+        "--repository-name", args.repo,
+        "--query", "imageDetails[*].{pushedAt:imagePushedAt,tags:imageTags}",
+        "--output", "json",
+    ]
+
+    # If a different account ID is provided, add it to the command
+    if args.registry_id:
+        cmd.extend(["--registry-id", args.registry_id])
+
+    out = sh(cmd)
 
     items = json.loads(out)
     rows: List[Tuple[str, str]] = []
-    args.all_tags = True
+
     for item in items:
         pushed = item.get("pushedAt") or ""
         tags = item.get("tags") or []
-
-        if not isinstance(tags, list):
-            continue
+        if not isinstance(tags, list): continue
 
         for t in tags:
-            if not isinstance(t, str):
-                continue
-            if (not args.all_tags) and args.service and not t.endswith(f"_{args.service}"):
-                continue
+            # Logic fix: Only filter if not --all-tags and service is provided
+            if not args.all_tags and args.service:
+                if not t.endswith(f"_{args.service}"):
+                    continue
             rows.append((pushed, t))
 
     rows.sort(key=lambda x: x[0], reverse=True)
