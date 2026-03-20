@@ -19,7 +19,7 @@ steps:
         --repository-name "$${ECR_REPOSITORY}" \
         --region "$${AWS_REGION}" \
         --query 'sort_by(imageDetails, &imagePushedAt)[*].imageTags[]' \
-        --output text | grep "$${SERVICE_NAME}" | tail -r | head -n 10)
+        --output text | grep "$${SERVICE_NAME}" | tac | head -n 10)
 
       # 3. Print the results to the Buildkite Log
       if [ -z "$${TAGS}" ]; then
