@@ -46,6 +46,7 @@ def main() -> None:
     for item in items:
         pushed = item.get("pushedAt") or ""
         tags = item.get("tags") or []
+        print(f"{pushed}:{tags}")
         if not isinstance(tags, list): continue
 
         for t in tags:
