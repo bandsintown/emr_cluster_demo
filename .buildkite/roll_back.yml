@@ -12,28 +12,24 @@ steps:
 
       echo "--- Fetching tags for $${SERVICE_NAME} in $${ECR_REPOSITORY}..."
 
-      # 2. Run AWS command directly to avoid script issues
-      # This fetches tags, sorts them by date, and filters for your service
-      TAGS=$(aws ecr describe-images \
+      # tr '\t' '\n' splits the tab-separated tags into individual lines
+      TAGS=$$(aws ecr describe-images \
         --registry-id "$${REGISTRY_ID}" \
         --repository-name "$${ECR_REPOSITORY}" \
         --region "$${AWS_REGION}" \
         --query 'sort_by(imageDetails, &imagePushedAt)[*].imageTags[]' \
-        --output text | grep "$${SERVICE_NAME}" | tac | head -n 10)
+        --output text | tr '\t' '\n' | grep "$${SERVICE_NAME}" | tac | head -n 10)
 
-      # 3. Print the results to the Buildkite Log
       if [ -z "$${TAGS}" ]; then
         echo "Error: No tags found matching $${SERVICE_NAME}."
-        echo "Checking if repository has ANY images..."
-        aws ecr describe-images --registry-id "$${REGISTRY_ID}" --repository-name "$${ECR_REPOSITORY}" --region "$${AWS_REGION}" --max-items 1
         exit 1
       fi
 
       echo "--- Recent Tags Found ---"
       echo "$${TAGS}"
 
-      # 4. Grab the second most recent for the rollback suggestion
-      PREVIOUS_TAG=$(echo "$${TAGS}" | sed -n '2p')
+      # Now sed will correctly pick the 2nd line
+      PREVIOUS_TAG=$$(echo "$${TAGS}" | sed -n '2p')
+      
       echo "---"
-      echo "Detected Current Tag: $(echo "$${TAGS}" | sed -n '1p')"
       echo "Suggested Rollback Tag: $${PREVIOUS_TAG}"
