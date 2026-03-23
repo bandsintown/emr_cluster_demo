@@ -10,6 +10,7 @@ steps:
       AWS_ACCOUNT_ID="004095192903"
       ECR_REPOSITORY="emr_cluster"
       REGISTRY_ID="$${AWS_ACCOUNT_ID}"
+      ECR_REGISTRY="$${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
       # Required by s3-push.yml
       IMAGE_URI="$${AWS_ACCOUNT_ID}.dkr.ecr.$${AWS_REGION}.amazonaws.com/$${ECR_REPOSITORY}"
