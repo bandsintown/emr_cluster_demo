@@ -18,7 +18,7 @@ steps:
         --repository-name "$${ECR_REPOSITORY}" \
         --region "$${AWS_REGION}" \
         --query 'sort_by(imageDetails, &imagePushedAt)[*].imageTags[]' \
-        --output text | tr '\t' '\n' | grep "$${SERVICE_NAME}" | tac | head -n 10)
+        --output text | tr '\t' '\n' | grep "_$${SERVICE_NAME}" | tac | head -n 10)
 
       if [ -z "$${TAGS}" ]; then
         echo "Error: No tags found matching $${SERVICE_NAME}."
@@ -29,7 +29,8 @@ steps:
       echo "$${TAGS}"
 
       # Now sed will correctly pick the 2nd line
-      PREVIOUS_TAG=$$(echo "$${TAGS}" | sed -n '2p')
-      
+      PREVIOUS_TAG=$(echo "$${TAGS}" | sed -n '2p')
+
       echo "---"
       echo "Suggested Rollback Tag: $${PREVIOUS_TAG}"
+
