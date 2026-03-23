@@ -7,12 +7,15 @@ steps:
       # 1. Setup variables
       SERVICE_NAME="DailyArtistMetrics"
       AWS_REGION="us-east-1"
+      AWS_ACCOUNT_ID="004095192903"
       ECR_REPOSITORY="emr_cluster"
-      REGISTRY_ID="004095192903"
+      REGISTRY_ID="$${AWS_ACCOUNT_ID}"
+
+      # Required by s3-push.yml
+      IMAGE_URI="$${AWS_ACCOUNT_ID}.dkr.ecr.$${AWS_REGION}.amazonaws.com/$${ECR_REPOSITORY}"
 
       echo "--- Fetching tags for $${SERVICE_NAME} in $${ECR_REPOSITORY}..."
 
-      # tr '\t' '\n' splits the tab-separated tags into individual lines
       TAGS=$$(aws ecr describe-images \
         --registry-id "$${REGISTRY_ID}" \
         --repository-name "$${ECR_REPOSITORY}" \
@@ -34,3 +37,19 @@ steps:
       echo "---"
       echo "Suggested Rollback Tag: $${PREVIOUS_TAG}"
 
+      # Persist for downstream steps
+      buildkite-agent meta-data set "ROLLBACK_TAG" "$${PREVIOUS_TAG}"
+      buildkite-agent meta-data set "BUILD_TAG" "$${PREVIOUS_TAG}"
+      buildkite-agent meta-data set "IMAGE_URI" "$${IMAGE_URI}"
+      buildkite-agent meta-data set "AWS_REGION" "$${AWS_REGION}"
+      buildkite-agent meta-data set "AWS_ACCOUNT_ID" "$${AWS_ACCOUNT_ID}"
+      buildkite-agent meta-data set "SERVICE_NAME" "$${SERVICE_NAME}"
+
+  - label: "Rollback: Push previous tag to S3"
+    key: "rb_push_previous_to_s3"
+    depends_on: "rb_list_tags"
+    command: |
+      set -euo pipefail
+      echo "Using rollback tag: $$(buildkite-agent meta-data get ROLLBACK_TAG)"
+      echo "Using base image: $$(buildkite-agent meta-data get IMAGE_URI):$$(buildkite-agent meta-data get BUILD_TAG)"
+      buildkite-agent pipeline upload .buildkite/s3-push.yml
