@@ -14,8 +14,11 @@ steps:
       # Required by s3-push.yml
       IMAGE_URI="$${AWS_ACCOUNT_ID}.dkr.ecr.$${AWS_REGION}.amazonaws.com/$${ECR_REPOSITORY}"
 
-      echo "--- Fetching tags for $${SERVICE_NAME} in $${ECR_REPOSITORY}..."
+      echo "--- Authenticating to ECR registry: $${ECR_REGISTRY} ---"
+      aws ecr get-login-password --region "$${AWS_REGION}" \
+        | docker login --username AWS --password-stdin "$${ECR_REGISTRY}" >/dev/null 2>&1 || true
 
+      # tr '\t' '\n' splits the tab-separated tags into individual lines
       TAGS=$$(aws ecr describe-images \
         --registry-id "$${REGISTRY_ID}" \
         --repository-name "$${ECR_REPOSITORY}" \
@@ -50,6 +53,5 @@ steps:
     depends_on: "rb_list_tags"
     command: |
       set -euo pipefail
-      echo "Using rollback tag: $$(buildkite-agent meta-data get ROLLBACK_TAG)"
       echo "Using base image: $$(buildkite-agent meta-data get IMAGE_URI):$$(buildkite-agent meta-data get BUILD_TAG)"
       buildkite-agent pipeline upload .buildkite/s3-push.yml
