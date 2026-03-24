@@ -49,10 +49,6 @@ def _iter_files(root: Path, pattern: str) -> list[Path]:
 
 class GitHubS3Uploader:
     def __init__(self, env: str = "prod"):
-        if boto3 is None:
-            raise SystemExit(
-                "Missing dependency: boto3. Install it (e.g., pip install boto3) in the runtime environment."
-            )
         session = boto3.Session(profile_name="bit-prod")
         s3_resource = session.resource("s3")
 

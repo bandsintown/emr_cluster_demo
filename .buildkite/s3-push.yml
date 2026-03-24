@@ -8,11 +8,14 @@ steps:
       -  |
         IMAGE_URI="$(buildkite-agent meta-data get IMAGE_URI)"
         BUILD_TAG="$(buildkite-agent meta-data get BUILD_TAG)"
+        # Read ENV from Buildkite meta-data (fallback to dev if not set)
+        ENVIRONMENT="$(buildkite-agent meta-data get ENV || echo dev)"
         DOCKERFILE_PATH="DockerfilePushtoS3"
         BASE_DIR="."
         echo "===================================="
         echo "Building uploader image from base:"
         echo "  $${IMAGE_URI}:$${BUILD_TAG}"
+        echo "  ENV=$${ENVIRONMENT}"
         echo "===================================="
         docker build \
           --file "$${DOCKERFILE_PATH}" \
@@ -23,6 +26,6 @@ steps:
         docker run --rm \
           -v ~/.aws:/root/.aws:ro \
           -e AWS_PROFILE=bit-prod \
-          -e ENV="dev" \
+          -e ENV="$${ENVIRONMENT}" \
           -e IMAGE_TAG="$${BUILD_TAG}" \
           my-new-image:latest
